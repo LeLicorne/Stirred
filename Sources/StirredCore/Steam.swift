@@ -21,7 +21,10 @@ public protocol GameStoreProvider: Sendable {
 
 public struct SteamProvider: GameStoreProvider {
     /// Flags that make the Steam client (Chromium Embedded Framework) behave under Wine.
-    public static let clientFlags = ["-no-cef-sandbox", "-cef-disable-gpu-compositing"]
+    /// `-noverifyfiles -nobootstrapupdate` stop Steam from restoring the original `steamwebhelper.exe`
+    /// over our wrapper (see Wrapper/ and Scripts/install-webhelper-wrapper.sh). The wrapper is what
+    /// fixes the black window; GPU-related CEF flags alone did not.
+    public static let clientFlags = ["-no-cef-sandbox", "-noverifyfiles", "-nobootstrapupdate"]
 
     public let runner: WineRunner
     public let logsDirectory: URL

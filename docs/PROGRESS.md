@@ -31,8 +31,21 @@ A native macOS Steam.app also exists; Stirred uses its own isolated Windows Stea
 `engines/stirred-dev` (the working engine; raw `wine-staging-11.21` and `dxmt-0.80` kept beside it),
 `prefixes/steam`, `steam-first-run.log`, `logs/`.
 
+## Steam black window: SOLVED (2026-11-05, evening)
+Symptom: Steam window black under Wine 11 (also without DXMT, so DXMT is not the cause; GPU flags did not help).
+Fix: replace `steamwebhelper.exe` (in every `bin/cef/cef.win*`) with our wrapper (`Wrapper/steamwebhelper_wrapper.c`,
+cross-compiled with Homebrew `mingw-w64`) that starts `steamwebhelper_real.exe` with `--disable-gpu --single-process`.
+Steam restores the original at boot unless started with `-noverifyfiles -nobootstrapupdate`.
+Procedure: `Scripts/install-webhelper-wrapper.sh` then start Steam with those flags. Verified by window capture
+(`screencapture -l <windowid>` works; window ids via CGWindowList). Idea came from the open-source project
+notpop/steam-on-m1-wine (wrapper written from scratch here, not copied).
+**Open risk** (same project reports it): with Wine 11, D3D11 *game* windows may render transparent through upstream
+DXMT; they needed a patched DXMT + a Wine build with `-fvisibility=default`, and a virtual-desktop wrapper. Test a real game
+before assuming DXMT works. Also: Steam updates may replace the helper again → redeploy wrapper before each launch.
+Currently the working Steam run uses the RAW engine `wine-staging-11.21`, not `stirred-dev` (DXMT overlay).
+
 ## NOT done / where I stopped
-1. **Steam login not done**: needs the user (I cannot type passwords). Steam was left running at the login
+1. **Steam login not done**: Steam is now running and shows the login form (no more black window). User must sign in with the test account.
    screen (started with `stirredctl steam`-equivalent flags). If it is closed: `swift run stirredctl steam`.
 2. No real game launched yet → all recipes `verified: false`, performance unmeasured.
 3. DXVK + MoltenVK + vkd3d-proton **not installed** (only DXMT). DX9 games need DXVK+MoltenVK, DX12 needs
