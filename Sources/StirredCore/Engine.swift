@@ -37,6 +37,11 @@ public enum EngineLocator {
     }
 
     public static func preferred(paths: StirredPaths = StirredPaths()) -> Engine? {
-        installedEngines(paths: paths).first
+        // Debug/experiments: STIRRED_ENGINE=<directory name under engines/> forces a specific engine.
+        if let name = ProcessInfo.processInfo.environment["STIRRED_ENGINE"] {
+            let engine = Engine(directory: paths.engines.appendingPathComponent(name, isDirectory: true))
+            return engine.wineBinary == nil ? nil : engine
+        }
+        return installedEngines(paths: paths).first
     }
 }

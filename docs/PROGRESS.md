@@ -44,6 +44,24 @@ DXMT; they needed a patched DXMT + a Wine build with `-fvisibility=default`, and
 before assuming DXMT works. Also: Steam updates may replace the helper again → redeploy wrapper before each launch.
 Currently the working Steam run uses the RAW engine `wine-staging-11.21`, not `stirred-dev` (DXMT overlay).
 
+
+## Session 2026-11-06 findings (read before debugging Steam again)
+- **The "Steam won't start after relaunch" bug was MY script**, not DXMT: `install-webhelper-wrapper.sh` once copied a
+  *rebuilt wrapper* over `steamwebhelper_real.exe` (it compared hashes), so the wrapper launched itself forever.
+  Fixed: classify by file size (<500 KB = wrapper), refuse if `_real` is not Valve's 7.5 MB file, only handle `cef.win64`.
+  Recovery if it happens again: delete `steamwebhelper_real.exe`, start Steam once WITHOUT `-noverifyfiles` so it restores Valve's
+  file, then rerun the script.
+- Steam UI works on BOTH engines (raw `wine-staging-11.21` and `stirred-dev` = +DXMT). Saved login survives restarts.
+  Use `STIRRED_ENGINE=<dir under engines/>` to pick an engine; only one engine per running Steam/wineserver.
+- Never `kill -9` casually: use `wineserver -k` first. Debug tooling: window list via CGWindowListCopyWindowInfo +
+  `screencapture -l <id>` (needs the Screen Recording permission the user granted).
+- Installed test game: **Cat Purrtrol: Find All 100!** (appid 2895990, Unity 2019.3.15, 32-bit, 874 MB). Game process starts but
+  **crashes at startup inside UnityPlayer.dll** (Player.log: "Crash!!!" + stack, before any renderer line). Seen on the raw engine
+  (loads OPENGL32 => wined3d). Test on `stirred-dev` (DXMT) was launched but result not confirmed (log timestamp ambiguous).
+  Next: check `Player.log` freshness, try `-force-d3d11` / `-force-gles` style Unity args via recipe `launch_args`, check the
+  32-bit WoW64 path (upstream DXMT notes say 32-bit Unity needed a patched DXMT/Wine build), and try a 64-bit DX11 game.
+- User shared a test-account password in chat: told to change it; it was NOT stored anywhere.
+
 ## NOT done / where I stopped
 1. **Steam login not done**: Steam is now running and shows the login form (no more black window). User must sign in with the test account.
    screen (started with `stirredctl steam`-equivalent flags). If it is closed: `swift run stirredctl steam`.
