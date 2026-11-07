@@ -79,6 +79,35 @@ func prepareGraphics(for game: Game, plan: LaunchPlan) async throws {
     }
 }
 
+/// Samples the game's processes every 3 s: waits for the process to appear, stops when it exits or after `maxSeconds`.
+func watchSession(_ recorder: inout SessionRecorder, maxSeconds: Int) async {
+    let needle = recorder.record.processNeedle
+    let waitStart = Date()
+    var started: Date?
+    var misses = 0
+    while true {
+        let now = Date()
+        if started == nil, now.timeIntervalSince(waitStart) > 120 { print("game process never appeared"); return }
+        if let started, now.timeIntervalSince(started) >= Double(maxSeconds) { return }
+        let sample = SystemSampler.sample(processNeedle: needle, at: started.map { now.timeIntervalSince($0) } ?? 0)
+        if sample.processCount > 0 {
+            if started == nil { started = now; print("game detected, sampling every 3 s (max \(maxSeconds) s)...") }
+            misses = 0
+            var s = sample; s.t = now.timeIntervalSince(started ?? now)
+            recorder.add(s)
+        } else if started != nil {
+            misses += 1
+            if misses >= 2 { print("game exited"); return }
+        }
+        try? await Task.sleep(nanoseconds: 3_000_000_000)
+    }
+}
+
+func intOption(_ name: String, default value: Int) -> Int {
+    guard let i = args.firstIndex(of: name), i + 1 < args.count, let n = Int(args[i + 1]) else { return value }
+    return n
+}
+
 func printPlan(_ plan: LaunchPlan) {
     print("backend:  \(plan.backend.rawValue)   latency: \(plan.latency.rawValue)")
     print("env:      \(plan.environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " "))")
@@ -90,7 +119,7 @@ func printPlan(_ plan: LaunchPlan) {
 
 func run() async throws {
     guard let command = args.first else {
-        print("usage: stirredctl <doctor|init-prefix|steam|library|plan <appid>|run <appid>>")
+        print("usage: stirredctl <doctor|init-prefix|steam|library|plan <appid>|run <appid> [--watch] [--latency P] [--hud] [--async]|report [dir]>")
         return
     }
     switch command {
@@ -130,8 +159,26 @@ func run() async throws {
         let launchPlan = plan(for: game)
         printPlan(launchPlan)
         try await prepareGraphics(for: game, plan: launchPlan)
+        let needle = GameExecutableFinder.candidates(in: game.installDirectory ?? paths.root).first?.lastPathComponent ?? game.name
+        var recorder = try SessionRecorder.begin(
+            game: game, plan: launchPlan, engine: (EngineLocator.preferred(paths: paths)?.name ?? "unknown"),
+            processNeedle: needle, paths: paths)
         let process = try makeSteam().launch(game, plan: launchPlan)
-        print("launch requested (pid \(process.processIdentifier)); log: \(paths.logs.path)/game-\(game.storeID).log")
+        print("launch requested (pid \(process.processIdentifier)); session: \(recorder.directory.path)")
+        if args.contains("--watch") {
+            await watchSession(&recorder, maxSeconds: intOption("--seconds", default: 600))
+            let report = try recorder.finish(paths: paths, prefix: try makeRunner().prefix)
+            print("report: \(report.path)")
+        } else {
+            print("tip: add --watch to sample CPU/GPU while you play, or run `stirredctl report` afterwards")
+        }
+    case "report":
+        // stirredctl report [session-directory]   (default: latest session)
+        let dir = args.count > 1 ? URL(fileURLWithPath: args[1])
+            : SessionRecorder.sessionsDirectory(paths).appendingPathComponent("latest").resolvingSymlinksInPath()
+        var recorder = try SessionRecorder.load(dir)
+        let report = try recorder.finish(paths: paths, prefix: try makeRunner().prefix)
+        print(try String(contentsOf: report, encoding: .utf8))
     default:
         fail("unknown command: \(command)")
     }

@@ -236,3 +236,75 @@ struct LogRotationTests {
         #expect(FileManager.default.fileExists(atPath: log.appendingPathExtension("1").path))
     }
 }
+
+@Suite("Session report")
+struct SessionReportTests {
+    @Test func parsesGPUUtilization() {
+        let io = "| | \"PerformanceStatistics\" = {\"Tiler Utilization %\"=39,\"Device Utilization %\"=46,\"Renderer Utilization %\"=45}"
+        #expect(SystemSampler.parseGPUUtilization(io) == 46)
+        #expect(SystemSampler.parseGPUUtilization("nothing") == nil)
+    }
+
+    @Test func parsesProcessTotals() {
+        let ps = """
+          %CPU   RSS COMMAND
+          80.5 204800 C:\\Program Files (x86)\\Steam\\steamapps\\common\\Muck\\Muck.exe -x
+          20.0 102400 C:\\Program Files (x86)\\Steam\\steamapps\\common\\Muck\\UnityCrashHandler64.exe
+           5.0   1024 /usr/bin/other
+        """
+        let t = SystemSampler.parseProcesses(ps, containing: "Muck.exe")
+        #expect(t.count == 1 && t.cpu == 80.5 && t.rssMB == 200)
+    }
+
+    @Test func redactsUserNameAndHome() {
+        let r = Redactor(home: "/Users/jo", user: "jo")
+        let out = r.redact("/Users/jo/Library/x and C:\\users\\jo\\AppData\\y and /Users/jo")
+        #expect(!out.contains("jo\\") && !out.contains("/Users/jo"))
+        #expect(out.contains("~/Library/x") && out.contains("C:\\users\\<user>\\AppData"))
+    }
+
+    private func record(cpu: Double, gpu: Int, lowPower: Bool = false) -> SessionRecord {
+        let samples = (0..<5).map { SessionSample(t: Double($0) * 3, gpuPercent: gpu, cpuPercent: cpu, rssMB: 500, processCount: 2) }
+        return SessionRecord(
+            gameName: "G", store: "steam", storeID: "1", backend: "dxvk", latency: "low", engine: "e",
+            processNeedle: "G.exe", startedAt: Date(timeIntervalSince1970: 0), endedAt: Date(timeIntervalSince1970: 60),
+            environment: [:], planWarnings: [],
+            system: SystemInfo(macOS: "27", chip: "Apple M4", memoryGB: 16, lowPowerMode: lowPower, onBattery: false),
+            samples: samples)
+    }
+
+    @Test func findingsClassifyBottlenecks() {
+        #expect(ReportBuilder.findings(for: record(cpu: 40, gpu: 95), crashDetected: false).contains { $0.contains("GPU-bound") })
+        #expect(ReportBuilder.findings(for: record(cpu: 99, gpu: 30), crashDetected: false).contains { $0.contains("CPU-bound") })
+        #expect(ReportBuilder.findings(for: record(cpu: 30, gpu: 30), crashDetected: false).contains { $0.contains("Neither") })
+        #expect(ReportBuilder.findings(for: record(cpu: 30, gpu: 30, lowPower: true), crashDetected: true).count >= 3)
+    }
+
+    @Test func recorderWritesReportWithRedactedExcerpts() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-sess-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let paths = StirredPaths(root: tmp)
+        let prefix = paths.prefix(named: "steam")
+        let logDir = prefix.appendingPathComponent("drive_c/users/jo/AppData/LocalLow/Dev/Game")
+        try FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
+        try "Initialize engine\nDirect3D 11\nCrash!!!\nC:\\users\\jo\\secret".write(
+            to: logDir.appendingPathComponent("Player.log"), atomically: true, encoding: .utf8)
+
+        let game = Game(store: "steam", storeID: "42", name: "Demo", installDirectory: nil)
+        let plan = LaunchPlanner.plan(recipe: nil, detectedAPIs: [.d3d11], hardware: HardwareProfile(memoryGB: 16))
+        let system = SystemInfo(macOS: "27", chip: "Apple M4", memoryGB: 16, lowPowerMode: false, onBattery: false)
+        var rec = try SessionRecorder.begin(
+            game: game, plan: plan, engine: "e", processNeedle: "Demo.exe", paths: paths,
+            system: system, now: Date().addingTimeInterval(-30))
+        let report = try rec.finish(paths: paths, prefix: prefix, redactor: Redactor(home: "/Users/jo", user: "jo"))
+
+        let md = try String(contentsOf: report, encoding: .utf8)
+        #expect(md.contains("Crash detected | YES"))
+        #expect(md.contains("Direct3D 11"))
+        let excerpt = try String(contentsOf: rec.directory.appendingPathComponent("excerpts/unity-Player.log"), encoding: .utf8)
+        #expect(excerpt.contains("<user>") && !excerpt.contains("users\\jo"))
+        let loaded = try SessionRecorder.load(rec.directory)
+        #expect(loaded.record.storeID == "42")
+        #expect(FileManager.default.fileExists(atPath: rec.directory.deletingLastPathComponent().appendingPathComponent("latest").path))
+    }
+}

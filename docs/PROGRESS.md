@@ -95,6 +95,17 @@ Results of real tests on M4 / macOS 27 / Gcenx Wine 11.21 (both staging and deve
 - Still open: Wine input path latency (needs a Wine rebuild to change), MoltenVK tuning (perf only), CPU vs GPU bound at high graphics
   (not measured now that power is fixed), Warframe/Trackmania (not installed), DX9 (d3d9.dll in package, not wired), DX12.
 
+
+## Session reports (2026-11-07, late) — how to use
+- `stirredctl run <appid> --watch [--seconds N]` records a session in `logs/sessions/<stamp>-<appid>/` (symlink `latest`):
+  `report.md` (read this first), `session.json`, `samples.csv` (GPU %, game CPU %, RSS every 3 s), `excerpts/*` (Unity Player.log,
+  Steam gameprocess/console logs, DXVK logs, redacted: user name/home removed). `stirredctl report [dir]` regenerates it after playing.
+- Steam is now started with `DXVK_LOG_PATH=logs/dxvk`, `DXVK_LOG_LEVEL=info` (games inherit Steam's env), `MVK_CONFIG_LOG_LEVEL=1`.
+- Logs are bounded: `LogRotation` (20 MB) and a former 7 GB `steam-client.log` was truncated.
+- Findings are hints: GPU util is whole-machine, CPU is approximate (`ps`). FPS are NOT logged: use `--hud` + a screenshot.
+- Unity buffers Player.log: if the report is generated while the game still runs, "Key log lines" can be incomplete.
+- Tests: 27 pass (`swift test -j 4`).
+
 ## NOT done / where I stopped
 1. **Steam login not done**: Steam is now running and shows the login form (no more black window). User must sign in with the test account.
    screen (started with `stirredctl steam`-equivalent flags). If it is closed: `swift run stirredctl steam`.
