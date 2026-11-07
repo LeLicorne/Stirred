@@ -148,6 +148,17 @@ Results of real tests on M4 / macOS 27 / Gcenx Wine 11.21 (both staging and deve
 - HoloCure visual result not confirmed by the user yet (recipe stays `unknown`/unverified until then).
 - 33 tests pass.
 
+
+## Trackmania attempt (2026-11-07, 03:10) — NOT playable yet
+- Installed (6.67 GB) plus "Ubisoft Connect Services" (appid 4099820). `stirredctl run trackmania`: Trackmania.exe exits immediately after
+  starting `Ubisoft Game Launcher\UbisoftGameLauncher.exe`; Ubisoft's processes (UbisoftGameLauncher, UplayService, UplayWebCore gpu-process)
+  then spin at ~100% CPU each, restart every ~1 min, no window appears. `Ubisoft Game Launcher/logs/launcher_log.txt`:
+  "StartReqError, GameStarter reported errors ... code: 109"; service_log: missing `HKEY_CLASSES_ROOT\uplay` registry keys.
+- Next ideas (not tried): wrap `UplayWebCore.exe` like steamwebhelper (`--disable-gpu --single-process`; Ubisoft Connect is also CEF-based),
+  register the `uplay://` protocol keys, install vcrun/webview components, check Ubisoft Connect's own `-no-sandbox`-style flags.
+  Account: the user must create/link a Ubisoft account themselves (credentials are never typed by Claude).
+- Seed recipes had `"graphics":"dxmt"` (wrong: DXMT cannot work here); removed from Trackmania/Warframe/CS2.
+
 ## NOT done / where I stopped
 1. **Steam login not done**: Steam is now running and shows the login form (no more black window). User must sign in with the test account.
    screen (started with `stirredctl steam`-equivalent flags). If it is closed: `swift run stirredctl steam`.
