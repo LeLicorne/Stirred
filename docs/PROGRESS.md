@@ -195,6 +195,17 @@ Results of real tests on M4 / macOS 27 / Gcenx Wine 11.21 (both staging and deve
 - New CLI flags: `--via-steam` / `--direct` override the recipe's launch mode (`LaunchOptions.launchMode`).
 - Next: user clicks "I AGREE", the launcher updates (watch Launcher.log), then `stirredctl run warframe` (direct) and log in with a Warframe account.
 
+
+## Warframe launcher: what actually unblocks the update (2026-11-07, 03:55) — supersedes the "disable Direct3D" note above
+- Disabling d3d11/dxgi for Launcher.exe makes its own spec check fail ("Could not find DXGI.DLL!" / "Error loading d3d11.dll" / EULA then a
+  "specs2021" page with only Quit). Wine's builtin D3D11 also fails that check ("Checking for D3D11 support on adapter 0 failed").
+- **Working combo** (`Scripts/setup-warframe-launcher.sh`): DXVK dlls in `Warframe/Tools/` + native overrides for d3d11/dxgi/d3d10core for
+  Launcher.exe, AND `d3dcompiler_47/46/43` disabled for Launcher.exe. Spec check passes, the launcher then ran its content update
+  (Launcher.log: "Downloaded .../74179406", "Finished Preprocess", "Total time 17.7 seconds") although its window stays white.
+- After that: `stirredctl run warframe` (direct launch, recipe) -> login screen. User must try to log in; if it still says "updated version
+  available", run `stirredctl run warframe --via-steam` again and wait for the launcher log to finish.
+- Launcher GPU process spins at ~80% CPU while the launcher is open: close the launcher after the update.
+
 ## NOT done / where I stopped
 1. **Steam login not done**: Steam is now running and shows the login form (no more black window). User must sign in with the test account.
    screen (started with `stirredctl steam`-equivalent flags). If it is closed: `swift run stirredctl steam`.
