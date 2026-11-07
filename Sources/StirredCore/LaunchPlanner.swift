@@ -37,12 +37,10 @@ public enum LaunchPlanner {
             backend = chosen
         } else if detectedAPIs.contains(.d3d12) {
             backend = .vkd3d
-        } else if detectedAPIs.contains(.d3d11) || detectedAPIs.contains(.d3d10) {
-            backend = .dxmt
-        } else if detectedAPIs.contains(.d3d9) {
-            backend = .dxvk
         } else {
-            backend = .dxmt
+            // DXMT cannot create its Metal view on current upstream Wine builds (needs exported macdrv
+            // symbols), so DXVK-macOS + MoltenVK is the default for DX9/10/11 until that changes.
+            backend = .dxvk
         }
 
         switch backend {

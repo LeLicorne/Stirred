@@ -16,6 +16,7 @@ public struct StirredPaths: Sendable {
 
     public var engines: URL { root.appendingPathComponent("engines", isDirectory: true) }
     public var prefixes: URL { root.appendingPathComponent("prefixes", isDirectory: true) }
+    public var components: URL { root.appendingPathComponent("components", isDirectory: true) }
     public var downloads: URL { root.appendingPathComponent("downloads", isDirectory: true) }
     public var logs: URL { root.appendingPathComponent("logs", isDirectory: true) }
 

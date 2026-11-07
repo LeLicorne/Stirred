@@ -62,6 +62,26 @@ Currently the working Steam run uses the RAW engine `wine-staging-11.21`, not `s
   32-bit WoW64 path (upstream DXMT notes say 32-bit Unity needed a patched DXMT/Wine build), and try a 64-bit DX11 game.
 - User shared a test-account password in chat: told to change it; it was NOT stored anywhere.
 
+
+## Graphics backend decision (2026-11-07) — READ THIS
+Results of real tests on M4 / macOS 27 / Gcenx Wine 11.21 (both staging and devel):
+- **DXMT v0.80: unusable for now.** Fails with "Failed to create metal view, it seems like your Wine has no exported symbols
+  needed by DXMT". Needs a Wine built with `-fvisibility=default` (rebuild of macdrv). Revisit only if we build Wine ourselves.
+- **DXVK 3.1.1 (official): unusable on macOS.** Needs `geometryShader`, which MoltenVK/Metal lacks ("No adapters found").
+- **DXVK-macOS 1.10.3 (Gcenx fork, zlib): WORKS.** `Tests/Integration/d3d11_clear.c` (own D3D11 smoke test) creates the device on
+  the M4, presents frames, and the user SAW the pulsing colours on screen (per-window `screencapture -l` shows black for
+  Metal-backed windows: do not trust it for game windows; ask the user or capture the screen region with the window on top).
+- Therefore LaunchPlanner defaults to **dxvk** for DX9/10/11. DX12 (vkd3d-proton) still untested.
+- Install per executable, NOT via env vars: Steam is already running when a game starts, so env vars set by `stirredctl run`
+  never reach the game. `DXVKInstaller` copies DLLs next to the exe and sets `HKCU\Software\Wine\AppDefaults\<exe>\DllOverrides`.
+  Component: `Scripts/install-components.sh` -> `$ROOT/components/dxvk-macos-1.10.3`.
+- **32-bit Unity 2019 (Cat Purrtrol) still crashes at startup** with or without DXVK, on staging and devel: access violation in
+  UnityPlayer.dll then "Exception frame is not in stack limits" (Mono init, WoW64 32-bit on macOS). Not a graphics issue.
+  Do not spend more time on it; use 64-bit games for validation.
+- Engine `stirred-dev` still has the DXMT overlay (breaks nothing visible). Prefer `STIRRED_ENGINE=wine-staging-11.21`.
+- Next: install a 64-bit DX11 game (user clicks Install in the Steam window), run `stirredctl run <appid>`, ask the user what they
+  see, record the recipe. Then DX9 via the same DXVK-macOS (d3d9.dll is in the package but not installed yet).
+
 ## NOT done / where I stopped
 1. **Steam login not done**: Steam is now running and shows the login form (no more black window). User must sign in with the test account.
    screen (started with `stirredctl steam`-equivalent flags). If it is closed: `swift run stirredctl steam`.

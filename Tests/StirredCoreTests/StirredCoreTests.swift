@@ -49,10 +49,10 @@ struct GraphicsDetectionTests {
 struct LaunchPlannerTests {
     let hw = HardwareProfile(memoryGB: 16)
 
-    @Test func dx11DefaultsToDXMT() {
+    @Test func dx11DefaultsToDXVK() {
         let plan = LaunchPlanner.plan(recipe: nil, detectedAPIs: [.d3d11], hardware: hw)
-        #expect(plan.backend == .dxmt)
-        #expect(plan.requiredComponents.isEmpty)
+        #expect(plan.backend == .dxvk)
+        #expect(plan.requiredComponents == ["dxvk"])
         #expect(plan.environment["WINEMSYNC"] == "1")
     }
 
@@ -135,5 +135,55 @@ struct SteamScanTests {
         #expect(games.count == 1)
         #expect(games.first?.name == "Spacewar")
         #expect(games.first?.steamAppID == 480)
+    }
+}
+
+@Suite("Graphics setup")
+struct GraphicsSetupTests {
+    private func pe(machine: UInt16) -> Data {
+        var d = Data(count: 0x100)
+        d[0] = 0x4D; d[1] = 0x5A; d[0x3C] = 0x80
+        d[0x80] = 0x50; d[0x81] = 0x45
+        d[0x84] = UInt8(machine & 0xFF); d[0x85] = UInt8(machine >> 8)
+        return d
+    }
+
+    @Test func detectsPEArchitecture() {
+        #expect(PEInfo.architecture(of: pe(machine: 0x014C)) == .x86)
+        #expect(PEInfo.architecture(of: pe(machine: 0x8664)) == .x64)
+        #expect(PEInfo.architecture(of: Data("not a pe".utf8)) == .unknown)
+    }
+
+    @Test func registryCommandsTargetOnlyThatExecutable() {
+        let commands = DXVKInstaller.registryCommands(executableName: "Game.exe")
+        #expect(commands.count == 3)
+        #expect(commands[0][2] == "HKCU\\Software\\Wine\\AppDefaults\\Game.exe\\DllOverrides")
+        #expect(commands.map { $0[4] } == ["d3d11", "dxgi", "d3d10core"])
+    }
+
+    @Test func installCopiesTheRightArchitecture() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-dxvk-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let pkg = tmp.appendingPathComponent("pkg"), game = tmp.appendingPathComponent("game")
+        for arch in ["x32", "x64"] {
+            try FileManager.default.createDirectory(at: pkg.appendingPathComponent(arch), withIntermediateDirectories: true)
+            for dll in DXVKInstaller.dlls { try Data(arch.utf8).write(to: pkg.appendingPathComponent("\(arch)/\(dll)")) }
+        }
+        try FileManager.default.createDirectory(at: game, withIntermediateDirectories: true)
+        let exe = game.appendingPathComponent("g.exe")
+        let copied = try DXVKInstaller.install(package: pkg, executable: exe, architecture: .x86)
+        #expect(copied.count == 3)
+        #expect(try String(contentsOf: game.appendingPathComponent("d3d11.dll"), encoding: .utf8) == "x32")
+        #expect(throws: StirredError.self) { try DXVKInstaller.install(package: pkg, executable: exe, architecture: .unknown) }
+    }
+
+    @Test func finderSkipsCrashHandlersAndInstallers() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-find-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        for n in ["Game.exe", "UnityCrashHandler32.exe", "unins000.exe", "readme.txt"] {
+            try Data().write(to: tmp.appendingPathComponent(n))
+        }
+        #expect(GameExecutableFinder.candidates(in: tmp).map(\.lastPathComponent) == ["Game.exe"])
     }
 }

@@ -52,6 +52,25 @@ func findInstalledGame(_ appID: String) throws -> Game {
     return game
 }
 
+/// Installs the graphics backend for this game: DXVK DLLs next to each candidate executable + per-exe Wine overrides.
+func prepareGraphics(for game: Game, plan: LaunchPlan) async throws {
+    guard plan.backend == .dxvk, let dir = game.installDirectory else { return }
+    let package = paths.components.appendingPathComponent("dxvk-macos-1.10.3", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: package.path) else {
+        fail("DXVK component missing at \(package.path). Run Scripts/install-components.sh")
+    }
+    let runner = try makeRunner()
+    for exe in GameExecutableFinder.candidates(in: dir) {
+        let arch = PEInfo.architecture(ofFile: exe)
+        guard arch == .x86 || arch == .x64 else { continue }
+        try DXVKInstaller.install(package: package, executable: exe, architecture: arch)
+        for command in DXVKInstaller.registryCommands(executableName: exe.lastPathComponent) {
+            _ = try await runner.runAndWait(arguments: command)
+        }
+        print("dxvk installed for \(exe.lastPathComponent) (\(arch))")
+    }
+}
+
 func printPlan(_ plan: LaunchPlan) {
     print("backend:  \(plan.backend.rawValue)")
     print("env:      \(plan.environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " "))")
@@ -101,6 +120,7 @@ func run() async throws {
         let game = try findInstalledGame(args[1])
         let launchPlan = plan(for: game)
         printPlan(launchPlan)
+        try await prepareGraphics(for: game, plan: launchPlan)
         let process = try makeSteam().launch(game, plan: launchPlan)
         print("launch requested (pid \(process.processIdentifier)); log: \(paths.logs.path)/game-\(game.storeID).log")
     default:
