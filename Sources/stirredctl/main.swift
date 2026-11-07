@@ -47,7 +47,7 @@ func printPlan(_ plan: LaunchPlan) {
 
 func run() async throws {
     guard let command = args.first else {
-        print("usage: stirredctl <doctor|init-prefix|steam [--silent]|quit|library|plan <game>|run <game> [--watch] [--latency P] [--hud] [--async]|report [dir]>")
+        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|library|plan <game>|run <game> [--watch] [--latency P] [--hud] [--async]|report [dir]>")
         print("<game> is an appid or part of the name, e.g. `stirredctl run muck --watch`")
         return
     }
@@ -58,6 +58,7 @@ func run() async throws {
         for warning in PowerAdvice.warnings(for: .current) { print("power:     \(warning)") }
         print("rosetta:   \(FileManager.default.fileExists(atPath: "/Library/Apple/usr/share/rosetta/rosetta") ? "installed" : "MISSING (softwareupdate --install-rosetta)")")
         print("root:      \(launcher.paths.root.path)")
+        for item in launcher.setup.items() where !item.done { print("missing:   \(item.step.title): run `stirredctl setup`") }
         if let engine = try? launcher.engine() {
             let runner = try launcher.runner()
             print("engine:    \(engine.name)")
@@ -66,6 +67,11 @@ func run() async throws {
         } else {
             print("engine:    NONE (run Scripts/assemble-engine.sh)")
         }
+    case "setup":
+        // Installs everything that is missing: Wine, DXVK, the Windows environment, Steam. Safe to run again.
+        for item in launcher.setup.items() { print("\(item.done ? "[x]" : "[ ]") \(item.step.title)") }
+        try await launcher.setup.run { print($0) }
+        print("Setup complete. Start Steam with `stirredctl steam` and sign in once.")
     case "init-prefix":
         try await launcher.runner().initialisePrefix(logFile: launcher.paths.logs.appendingPathComponent("wineboot.log"))
         print("prefix ready")

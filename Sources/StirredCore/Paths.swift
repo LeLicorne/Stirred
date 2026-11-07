@@ -9,7 +9,9 @@ public struct StirredPaths: Sendable {
     }
 
     public static var defaultRoot: URL {
-        FileManager.default
+        // STIRRED_ROOT lets tests and scripts use a throw-away data folder.
+        if let override = ProcessInfo.processInfo.environment["STIRRED_ROOT"] { return URL(fileURLWithPath: override, isDirectory: true) }
+        return FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Stirred", isDirectory: true)
     }

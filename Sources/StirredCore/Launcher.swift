@@ -22,11 +22,32 @@ public enum SteamState: Sendable, Equatable {
 public struct Launcher: Sendable {
     public let paths: StirredPaths
     public let recipes: RecipeRepository
+    public let resourcesDirectory: URL
 
-    public init(paths: StirredPaths = StirredPaths(), recipesDirectory: URL = Launcher.defaultRecipesDirectory()) {
+    public init(
+        paths: StirredPaths = StirredPaths(), recipesDirectory: URL = Launcher.defaultRecipesDirectory(),
+        resourcesDirectory: URL = Launcher.defaultResourcesDirectory()
+    ) {
         self.paths = paths
         self.recipes = RecipeRepository(directory: recipesDirectory)
+        self.resourcesDirectory = resourcesDirectory
     }
+
+    /// STIRRED_RESOURCES, else the app bundle's Resources (when it holds `wrappers/`), else `./Resources`.
+    public static func defaultResourcesDirectory() -> URL {
+        if let override = ProcessInfo.processInfo.environment["STIRRED_RESOURCES"] { return URL(fileURLWithPath: override) }
+        if let bundled = Bundle.main.resourceURL,
+           FileManager.default.fileExists(atPath: bundled.appendingPathComponent("wrappers").path) { return bundled }
+        return URL(fileURLWithPath: FileManager.default.currentDirectoryPath + "/Resources")
+    }
+
+    /// The precompiled Steam display fix shipped with Stirred (nil if missing from this build).
+    public var wrapperURL: URL? {
+        let url = resourcesDirectory.appendingPathComponent("wrappers/steamwebhelper_wrapper.exe")
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    public var setup: SetupManager { SetupManager(paths: paths, wrapper: wrapperURL) }
 
     /// STIRRED_RECIPES, else the app bundle's `Resources/recipes`, else `./recipes`.
     public static func defaultRecipesDirectory() -> URL {
@@ -45,7 +66,12 @@ public struct Launcher: Sendable {
 
     public func runner() throws -> WineRunner { try WineRunner(engine: try engine(), prefix: paths.prefix(named: "steam")) }
     public func steam() throws -> SteamProvider { SteamProvider(runner: try runner(), logsDirectory: paths.logs) }
-    public func installedGames() throws -> [Game] { try steam().installedGames() }
+    /// Steam also installs technical components that are not games (shown nowhere in Stirred).
+    static let hiddenAppIDs: Set<String> = ["228980", "4099820"]   // Steamworks Common Redistributables, Ubisoft Connect Services
+
+    public func installedGames() throws -> [Game] {
+        try steam().installedGames().filter { !Self.hiddenAppIDs.contains($0.storeID) }
+    }
 
     public func recipe(for game: Game) -> Recipe? { game.steamAppID.flatMap { recipes.recipe(forSteamAppID: $0) } }
 
@@ -115,7 +141,10 @@ public struct Launcher: Sendable {
 
     /// `silent`: start minimised (no Steam window), only sensible once a login is remembered.
     public func startSteam(silent: Bool) throws {
-        _ = try steam().launchClient(silent: silent)
+        let steam = try steam()
+        if let wrapper = wrapperURL { _ = try? WebHelperWrapper.ensure(steamRoot: steam.steamRoot, wrapper: wrapper) }
+        // A windowless start only works when a login is remembered; otherwise the user must see the sign-in window.
+        _ = try steam.launchClient(silent: silent && steam.hasRememberedLogin)
     }
 
     public func waitUntilSteamReady(since: Date, timeout: TimeInterval) async -> Bool {
@@ -190,14 +219,17 @@ public struct Launcher: Sendable {
         if let reason = plan.blockedReason { throw StirredError.blocked(reason) }
 
         var since = Date.distantPast
+        var timeout: TimeInterval = 240
         if steamState() == .stopped {
-            onPhase("Starting Steam…")
+            let remembered = (try? steam().hasRememberedLogin) ?? false
+            onPhase(remembered ? "Starting Steam…" : "Sign in to Steam in the window that opens…")
+            if !remembered { timeout = 600 }
             since = Date()
             try startSteam(silent: true)
         }
         onPhase("Waiting for Steam…")
-        guard await waitUntilSteamReady(since: since, timeout: 240) else {
-            throw StirredError.blocked("Steam did not finish starting (is the account logged in? use Open Steam).")
+        guard await waitUntilSteamReady(since: since, timeout: timeout) else {
+            throw StirredError.blocked("Steam did not finish starting. Use Open Steam to check that you are signed in.")
         }
         onPhase("Preparing graphics…")
         try await prepareGraphics(for: game, plan: plan, options: options)

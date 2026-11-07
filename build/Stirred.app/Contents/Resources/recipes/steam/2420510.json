@@ -1,1 +1,0 @@
-{"appid":2420510,"name":"HoloCure - Save the Fans!","status":"playable","verified":true,"graphics":"dxvk","launch_mode":"direct","notes":"GameMaker, Windows-only, 64-bit, via DXVK-macOS. Verified 2026-11-07: reaches the main menu and plays. Steam's 'Grab a controller' prompt blocks a normal Steam launch, so it is started directly (Steam keeps running for Steamworks)."}

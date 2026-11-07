@@ -16,6 +16,14 @@ struct ContentView: View {
     @State private var section: Section? = Section(rawValue: (UserDefaults.standard.string(forKey: "section") ?? "").capitalized) ?? .library
 
     var body: some View {
+        switch model.setupComplete {
+        case nil: ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        case false?: SetupView()
+        case true?: mainView
+        }
+    }
+
+    private var mainView: some View {
         NavigationSplitView {
             List(Section.allCases, selection: $section) { s in
                 Label(s.rawValue, systemImage: s.icon).tag(s)
@@ -32,6 +40,59 @@ struct ContentView: View {
         // One flat background under the title: removes the lighter title strip and the notch where its edge met the divider.
         .toolbarBackground(.hidden, for: .windowToolbar)
         .navigationSplitViewStyle(.balanced)
+    }
+}
+
+// MARK: - First-run setup
+
+struct SetupView: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        VStack(spacing: 22) {
+            VStack(spacing: 6) {
+                Image(systemName: "gamecontroller.fill").font(.system(size: 44)).foregroundStyle(.tint)
+                Text("Welcome to Stirred").font(.largeTitle.bold())
+                Text("Play your Windows Steam games on this Mac. A one-time setup installs what is needed (about 300 MB).")
+                    .foregroundStyle(.secondary).multilineTextAlignment(.center)
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(model.setupItems) { item in
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: item.done ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(item.done ? Color.green : Color.secondary).font(.title3)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.step.title).font(.headline)
+                            Text(item.step.summary).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .padding(20).frame(maxWidth: 520, alignment: .leading)
+            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+
+            if let error = model.setupError {
+                Banner(text: error, color: .red).frame(maxWidth: 520)
+            }
+
+            if model.setupBusy {
+                VStack(spacing: 8) {
+                    ProgressView()
+                    Text(model.setupMessage ?? "").font(.callout).foregroundStyle(.secondary)
+                }
+            } else {
+                Button { model.runSetup() } label: {
+                    Label(model.setupError == nil ? "Set up Stirred" : "Try again", systemImage: "arrow.down.circle.fill")
+                        .font(.title3).padding(.horizontal, 12)
+                }
+                .buttonStyle(.borderedProminent).controlSize(.large)
+            }
+
+            Text("When it is done, a Steam window opens: sign in once, and your games appear in Stirred.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(40).frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -80,6 +141,9 @@ struct LibraryView: View {
                     Banner(text: "No Wine engine found. Run Scripts/assemble-engine.sh, then relaunch.", color: .red)
                 }
                 ForEach(model.warnings, id: \.self) { Banner(text: $0, color: .yellow) }
+                if model.steam == .running && model.games.isEmpty {
+                    Banner(text: "Steam is starting or waiting for you to sign in: use Open Steam in the sidebar.", color: .blue)
+                }
                 if let message = model.message { Banner(text: message, color: .red) }
 
                 if model.games.isEmpty {

@@ -1,0 +1,46 @@
+# Known issues, findings and workarounds
+
+Measured on an Apple M4, 16 GB, macOS 27, Wine staging 11.21 (Gcenx), DXVK-macOS 1.10.3.
+
+## Graphics
+
+- **DXMT (DX11→Metal) does not work** on this Wine: "Failed to create metal view, it seems like your Wine has no exported
+  symbols needed by DXMT". It would need a Wine built with `-fvisibility=default`.
+- **Official DXVK 2.x/3.x does not start on macOS**: it requires `geometryShader`, which Metal does not have.
+  The Gcenx **DXVK-macOS 1.10.3** fork works and is what Stirred uses.
+- DXVK logs MoltenVK limitations that can make an object or effect invisible: *"Render pipeline compile failed ... int4 cannot
+  be read using MTLAttributeFormatUInt4"* and *"Transform feedback not supported"*. Session reports count them.
+- DirectX 12 (vkd3d-proton) is not wired up. Games that import `d3d12.dll` are forced to DX11 through their recipe when possible.
+
+## Performance
+
+- **macOS Low Power Mode and battery power cap games around 30 FPS** (Muck: 24-30 FPS → ~130 FPS once plugged in with the mode off).
+- Input lag: the `lowest` latency profile (1 frame queued, V-Sync off) felt much better; turning V-Sync off in the game helps too.
+- FPS cannot be written to a log (DXVK only draws them): use the "FPS overlay" toggle and take a screenshot.
+
+## Steam under Wine
+
+- Black Steam window → the display fix (see ARCHITECTURE). If a Steam update replaces the helper, start Steam from Stirred again
+  (it re-applies the fix on every start).
+- A windowless start needs a remembered login. The first start of a fresh install shows the sign-in window.
+- Steam's *"Grab a controller and kick back!"* prompt blocks a normal launch and its OK button ignored clicks. Games
+  affected (HoloCure) use `launch_mode: direct`: no Steam overlay or playtime tracking, but no prompt.
+- `assert_<game>.exe_*.dmp` files in Steam's `dumps` folder are non-fatal assertions, not crashes.
+- Steam keeps showing "Stopping" while any process it tracks for the game is alive. **Stop** in Stirred kills the whole folder's processes.
+
+## Games
+
+- **32-bit Unity 2019** (Cat Purrtrol) crashes at startup: access violation in `UnityPlayer.dll`, then *"Exception frame is not in stack limits"*
+  (32-bit code in Wine's WoW64 mode on macOS). Same with Wine devel, with or without DXVK. 64-bit Unity games work.
+- **Warframe**: its launcher (`Tools/Launcher.exe`, Chromium) is blank under Wine and hashes itself, so the game is started
+  directly in DX11 (recipe). The game asks for an update after each patch; to update:
+  `Scripts/setup-warframe-launcher.sh`, then `stirredctl run warframe --via-steam`, wait for `Launcher.log` to say
+  *"Finished Preprocess"*, close the launcher (its window stays white and its GPU process burns CPU), then play normally.
+  The launcher's hardware check needs a working D3D11 (DXVK provides it) while its Chromium must have no shader compiler.
+- **Trackmania**: `Trackmania.exe` only starts Ubisoft Connect, which spins at ~100% CPU on several processes and never starts the game
+  (`launcher_log`: "StartReqError ... code: 109"; missing `HKCR\uplay` keys). Wrapping `UplayWebCore.exe` calmed Chromium but not the service.
+- Kernel anti-cheat (EAC, BattlEye, Vanguard) never works on macOS; Stirred flags such games and never tries to bypass them.
+
+## Long-term risk
+
+Rosetta 2 is to be reduced after macOS 27 (check Apple's current notes). Stirred needs it to run x86 Wine.

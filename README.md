@@ -1,31 +1,86 @@
 # Stirred
 
-Play Windows Steam games on Apple Silicon Macs in one click, locally (no streaming latency).
+Play your Windows Steam games on an Apple Silicon Mac, locally (no streaming, no input lag from a server).
 Free, open source (GPL-3), built only from open-source components.
 
-> **Status: early prototype (WIP).** Not affiliated with Valve, Apple or any game publisher.
-> Steam is a trademark of Valve.
+> **Status: working prototype.** Several games run well (see below), but it is young software.
+> Stirred is not affiliated with Valve, Apple or any game publisher. Steam is a trademark of Valve.
 
-## How it works
-Stirred orchestrates Rosetta 2, [Wine](https://www.winehq.org/) (LGPL), and [DXMT](https://github.com/3Shain/dxmt)
-(LGPL-2.1, DirectX 11 → Metal) to run the **official** Windows Steam client in an isolated prefix,
-then launches your games through it. It never touches your credentials and never bypasses DRM or anti-cheat.
+## What you get
 
-Games using kernel anti-cheat (Easy Anti-Cheat, BattlEye, Vanguard…) do not run on macOS;
-Stirred flags them instead of trying to work around it.
+- **Library**: your installed Steam games with cover art, a compatibility badge, a latency setting and a **Play** button.
+  Stirred starts Steam in the background for you.
+- **Activity**: every launch is recorded (CPU, GPU, memory, crashes, graphics problems) with a plain-language summary.
+- **Logs**: Steam and graphics logs, searchable, with an "errors only" filter.
+- **One-time setup** inside the app: it downloads and installs everything it needs (about 300 MB).
 
-## Try it (developers)
+## Requirements
+
+- A Mac with **Apple Silicon** (M1 or later), **macOS 14+**, **Rosetta 2** installed
+  (`softwareupdate --install-rosetta --agree-to-license`).
+- About 2 GB free for Stirred itself, plus room for your games.
+- A Steam account. Use a secondary one while you experiment.
+- For laptops: **plug in and turn Low Power Mode off**, otherwise games are capped around 30 FPS.
+
+## Install
+
+1. Install Xcode (free) and open it once so the command-line tools are set up.
+2. Build the app:
+   ```sh
+   git clone <this repository> && cd stirred
+   Scripts/build-app.sh          # builds build/Stirred.app (add "release" for an optimised build)
+   open build/Stirred.app
+   ```
+   Or pack it: `Scripts/make-dmg.sh` creates `build/Stirred.dmg`.
+3. The app is **not notarized** (that needs a paid Apple developer account). If you got it as a download,
+   macOS will refuse it the first time: open **System Settings > Privacy & Security** and press **Open Anyway**.
+   An app you build yourself opens without any warning.
+
+## First start
+
+1. Press **Set up Stirred**. It installs the Wine engine, the graphics layer, a private Windows environment and Steam.
+   Steam updates itself once (a few minutes).
+2. A Steam window opens: **sign in once** (tick "remember me" so later starts need no window).
+3. Install games from that Steam window (or `stirredctl install <appid>`); they appear in the Library.
+4. Press **Play**.
+
+## Games tested (Apple M4, 16 GB, macOS 27)
+
+| Game | Result |
+|---|---|
+| Muck | Playable, ~130 FPS on low graphics |
+| HoloCure | Playable |
+| Warframe | Playable: ~90 FPS on low graphics, ~37 FPS on medium. Needs a one-time launcher update, see [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md) |
+| Trackmania | Does not start (Ubisoft Connect hangs under Wine) |
+| Cat Purrtrol: Find All 100! | Crashes at startup (32-bit Unity) |
+
+Games protected by kernel anti-cheat (Easy Anti-Cheat, BattlEye, Vanguard...) cannot run on macOS and Stirred does not
+try to work around them. For Counter-Strike 2 the recipe only allows offline play with Valve's `-insecure` switch.
+
+## Command line
+
+`stirredctl` is the same engine without the window, handy for debugging:
+
 ```sh
-sh Scripts/assemble-engine.sh        # downloads Wine + DXMT, builds engine "stirred-*"
-swift build && swift test
-.build/debug/stirredctl doctor
-.build/debug/stirredctl init-prefix
+swift build && .build/debug/stirredctl doctor          # what is installed, what is missing
+.build/debug/stirredctl setup                          # install everything missing
+.build/debug/stirredctl library                        # installed games
+.build/debug/stirredctl run muck --watch               # play and record a session (name or appid)
+.build/debug/stirredctl report                         # latest session report
 ```
-Then install Steam in the prefix, log in with a **secondary** account, and use `stirredctl library|plan|run`.
-See `docs/PROGRESS.md` for the current state and next steps.
 
-## Layout
-- `Sources/StirredCore`: all logic (engine, prefix, Steam provider, recipes, launch planner)
-- `Sources/stirredctl`: debug CLI
-- `recipes/steam/<appid>.json`: per-game compatibility knowledge
-- `Scripts/`: engine assembly
+## Troubleshooting
+
+- **FPS stuck near 30**: Low Power Mode or battery power. Stirred warns about both.
+- **Steam window is black or blank**: Stirred installs a small fix for it; run setup again, or see the known issues.
+- **A game starts then closes**: open **Activity** for its report, and **Logs** for details.
+- More in [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md).
+
+## For developers
+
+- Architecture and data layout: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Current status and next steps: [docs/PROGRESS.md](docs/PROGRESS.md)
+- Third-party components and licenses: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)
+- Tests: `swift test -j 4`. Per-game knowledge lives in `recipes/steam/<appid>.json`.
+
+Never type a Steam password into anything but the Steam window: Stirred never sees your credentials.

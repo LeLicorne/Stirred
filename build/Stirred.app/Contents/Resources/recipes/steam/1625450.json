@@ -1,1 +1,0 @@
-{"appid":1625450,"name":"Muck","status":"playable","verified":true,"graphics":"dxvk","latency":"lowest","notes":"Unity 2019.4 64-bit DX11 via DXVK-macOS 1.10.3 + MoltenVK on M4/macOS 27. Verified 2026-11-07: ~130 FPS on low graphics when plugged in with Low Power Mode off; only 24-30 FPS on battery in Low Power Mode. Input latency clearly better with latency=lowest."}

@@ -23,6 +23,11 @@ final class AppModel {
     var latency: [String: LatencyProfile] = [:]  // user's choice per game id
     var showHUD = false
     var sessions: [SessionSummary] = []
+    var setupItems: [SetupItem] = []
+    var setupComplete: Bool?                      // nil until the first check
+    var setupBusy = false
+    var setupMessage: String?
+    var setupError: String?
     private var started = false
 
     func start() {
@@ -33,7 +38,7 @@ final class AppModel {
 
     func refresh() async {
         let launcher = self.launcher
-        let snapshot = await Task.detached { () -> (Engine?, [Game], SteamState, [SessionSummary]) in
+        let snapshot = await Task.detached { () -> (Engine?, [Game], SteamState, [SessionSummary], [SetupItem]) in
             let engine = try? launcher.engine()
             let games = (try? launcher.installedGames()) ?? []
             let steam = engine == nil ? SteamState.stopped : launcher.steamState()
@@ -44,13 +49,33 @@ final class AppModel {
                 return SessionSummary(url: dir, title: r.record.gameName, startedAt: r.record.startedAt,
                                       crashed: crashed, sampleCount: r.record.samples.count)
             }
-            return (engine, games, steam, Array(sessions))
+            return (engine, games, steam, Array(sessions), launcher.setup.items())
         }.value
         engineName = snapshot.0?.name
         games = snapshot.1
         steam = snapshot.2
         sessions = snapshot.3
+        setupItems = snapshot.4
+        setupComplete = snapshot.4.allSatisfy(\.done)
         warnings = PowerAdvice.warnings(for: .current)
+    }
+
+    /// First-run installation (Wine, DXVK, Windows environment, Steam). Runs in the background.
+    func runSetup() {
+        guard !setupBusy else { return }
+        setupBusy = true
+        setupError = nil
+        setupMessage = "Starting…"
+        let manager = launcher.setup
+        Task.detached { [weak self] in
+            do {
+                try await manager.run { message in Task { @MainActor in self?.setupMessage = message } }
+            } catch {
+                await MainActor.run { self?.setupError = "\(error)" }
+            }
+            await MainActor.run { self?.setupBusy = false; self?.setupMessage = nil }
+            await self?.refresh()
+        }
     }
 
     func recipe(for game: Game) -> Recipe? { launcher.recipe(for: game) }

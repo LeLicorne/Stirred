@@ -10,6 +10,7 @@ APP="build/Stirred.app"
 rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/StirredApp"
 cp -R recipes "$APP/Contents/Resources/recipes"
+cp -R Resources/wrappers "$APP/Contents/Resources/wrappers"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

@@ -18,9 +18,7 @@
 #include <wchar.h>
 #include <stdlib.h>
 
-#ifndef REAL_EXE
-#define REAL_EXE L"steamwebhelper_real.exe"   /* Ubisoft Connect build: -DREAL_EXE=L\"UplayWebCore_real.exe\" */
-#endif
+#define REAL_EXE L"steamwebhelper_real.exe"
 #define EXTRA_FLAGS L" --disable-gpu --single-process"
 
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show)

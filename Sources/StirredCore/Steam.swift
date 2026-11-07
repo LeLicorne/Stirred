@@ -64,13 +64,22 @@ public struct SteamProvider: GameStoreProvider {
     }
 
     /// Starts the Steam client alone (used for first login and warm-up).
-    public func launchClient(silent: Bool = false) throws -> Process {
+    /// True when Steam remembers a signed-in account, so a silent (windowless) start can log in by itself.
+    public var hasRememberedLogin: Bool {
+        let file = steamRoot.appendingPathComponent("config/loginusers.vdf")
+        guard let text = try? String(contentsOf: file, encoding: .utf8),
+              let doc = try? VDF.parse(text), case .object(let users)? = doc["users"] else { return false }
+        return users.values.contains { $0["RememberPassword"]?.stringValue == "1" }
+    }
+
+    /// `firstRun`: Steam must be allowed to update itself, so no `-noverifyfiles -nobootstrapupdate`.
+    public func launchClient(silent: Bool = false, firstRun: Bool = false) throws -> Process {
         guard isInstalled else { throw StirredError.steamNotInstalled }
         // Set at Steam start because games inherit Steam's environment: DXVK then logs every game to one folder.
         let dxvkLogs = logsDirectory.appendingPathComponent("dxvk", isDirectory: true)
         try FileManager.default.createDirectory(at: dxvkLogs, withIntermediateDirectories: true)
         let process = try runner.makeProcess(
-            arguments: [steamExecutable.path] + Self.clientFlags + (silent ? ["-silent"] : []),
+            arguments: [steamExecutable.path] + (firstRun ? ["-no-cef-sandbox"] : Self.clientFlags) + (silent ? ["-silent"] : []),
             extraEnvironment: ["WINEMSYNC": "1", "DXVK_LOG_PATH": dxvkLogs.path, "DXVK_LOG_LEVEL": "info"],
             workingDirectory: steamRoot,
             logFile: logsDirectory.appendingPathComponent("steam-client.log"))

@@ -426,3 +426,101 @@ struct StopGameTests {
         #expect(patterns.first == "Track\\.exe")
     }
 }
+
+@Suite("Steam display fix (wrapper)")
+struct WebHelperWrapperTests {
+    private func tree() throws -> (root: URL, wrapper: URL) {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-wrap-\(UUID().uuidString)")
+        let cef = WebHelperWrapper.cefDirectory(steamRoot: tmp)
+        try FileManager.default.createDirectory(at: cef, withIntermediateDirectories: true)
+        try Data(count: 600_000).write(to: cef.appendingPathComponent("steamwebhelper.exe"))   // "Valve's" helper
+        let wrapper = tmp.appendingPathComponent("wrapper.exe")
+        try Data(repeating: 1, count: 150_000).write(to: wrapper)
+        return (tmp, wrapper)
+    }
+
+    @Test func wrapsOnceAndKeepsTheOriginal() throws {
+        let (root, wrapper) = try tree()
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(!WebHelperWrapper.isInstalled(steamRoot: root))
+        #expect(try WebHelperWrapper.ensure(steamRoot: root, wrapper: wrapper) == true)
+        #expect(WebHelperWrapper.isInstalled(steamRoot: root))
+        let dir = WebHelperWrapper.cefDirectory(steamRoot: root)
+        #expect(try Data(contentsOf: dir.appendingPathComponent("steamwebhelper_real.exe")).count == 600_000)
+        #expect(try Data(contentsOf: dir.appendingPathComponent("steamwebhelper.exe")).count == 150_000)
+    }
+
+    /// Regression: a rebuilt wrapper (different bytes) was once copied over the real helper, so the wrapper launched itself forever.
+    @Test func refreshingAnOldWrapperNeverTouchesTheRealHelper() throws {
+        let (root, wrapper) = try tree()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try WebHelperWrapper.ensure(steamRoot: root, wrapper: wrapper)
+        let newer = root.appendingPathComponent("wrapper2.exe")
+        try Data(repeating: 2, count: 160_000).write(to: newer)
+        #expect(try WebHelperWrapper.ensure(steamRoot: root, wrapper: newer) == false)
+        let dir = WebHelperWrapper.cefDirectory(steamRoot: root)
+        #expect(try Data(contentsOf: dir.appendingPathComponent("steamwebhelper_real.exe")).count == 600_000)
+        #expect(try Data(contentsOf: dir.appendingPathComponent("steamwebhelper.exe")).count == 160_000)
+    }
+
+    @Test func refusesWhenTheOriginalIsGone() throws {
+        let (root, wrapper) = try tree()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let dir = WebHelperWrapper.cefDirectory(steamRoot: root)
+        try Data(count: 150_000).write(to: dir.appendingPathComponent("steamwebhelper.exe"))   // a wrapper, no real file
+        #expect(throws: WebHelperWrapper.Failure.self) { try WebHelperWrapper.ensure(steamRoot: root, wrapper: wrapper) }
+    }
+
+    @Test func doesNothingBeforeSteamHasDownloadedItsUI() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-wrap-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        let wrapper = tmp.appendingPathComponent("w.exe"); try Data(count: 10).write(to: wrapper)
+        #expect(try WebHelperWrapper.ensure(steamRoot: tmp, wrapper: wrapper) == false)
+    }
+}
+
+@Suite("First-run setup")
+struct SetupTests {
+    @Test func emptyDataFolderReportsEverythingMissing() {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-setup-\(UUID().uuidString)")
+        let items = SetupManager(paths: StirredPaths(root: tmp), wrapper: nil).items()
+        #expect(items.count == SetupStep.allCases.count)
+        #expect(items.filter { $0.step != .rosetta }.allSatisfy { !$0.done })
+        #expect(!SetupManager(paths: StirredPaths(root: tmp), wrapper: nil).isComplete)
+    }
+
+    @Test func sha256MatchesAKnownValue() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("sha-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try Data("abc".utf8).write(to: file)
+        #expect(try SetupManager.sha256Hex(of: file) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+    }
+
+    @Test func detectsARememberedSteamLogin() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-login-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let engineBin = tmp.appendingPathComponent("engine/bin")
+        try FileManager.default.createDirectory(at: engineBin, withIntermediateDirectories: true)
+        let wine = engineBin.appendingPathComponent("wine")
+        try "#!/bin/sh\n".write(to: wine, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wine.path)
+        let runner = try WineRunner(engine: Engine(directory: tmp.appendingPathComponent("engine")), prefix: tmp)
+        let steam = SteamProvider(runner: runner, logsDirectory: tmp)
+        #expect(!steam.hasRememberedLogin)
+        let config = steam.steamRoot.appendingPathComponent("config")
+        try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
+        try "\"users\" { \"7656\" { \"AccountName\" \"x\" \"RememberPassword\" \"1\" \"MostRecent\" \"1\" } }"
+            .write(to: config.appendingPathComponent("loginusers.vdf"), atomically: true, encoding: .utf8)
+        #expect(steam.hasRememberedLogin)
+    }
+}
+
+@Suite("Library filtering")
+struct LibraryFilterTests {
+    @Test func technicalComponentsAreHidden() {
+        #expect(Launcher.hiddenAppIDs.contains("228980"))
+        #expect(Launcher.hiddenAppIDs.contains("4099820"))
+        #expect(!Launcher.hiddenAppIDs.contains("1625450"))
+    }
+}
