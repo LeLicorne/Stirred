@@ -1,0 +1,1 @@
+{"appid":2895990,"name":"Cat Purrtrol: Find All 100!","status":"unsupported","verified":true,"blockers":["32-bit-unity-crash"],"notes":"32-bit Unity 2019.3: crashes at startup in UnityPlayer.dll (Wine WoW64 on macOS, 'Exception frame is not in stack limits'). Same on Wine staging and devel, with or without DXVK."}

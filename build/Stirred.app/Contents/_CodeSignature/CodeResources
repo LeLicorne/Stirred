@@ -28,6 +28,10 @@
 		<data>
 		GOuNvT7VtQ/GGUtISnszXZoKPkY=
 		</data>
+		<key>Resources/recipes/steam/2895990.json</key>
+		<data>
+		mUQoG5qrXBwJRsT8seEDauDZHOE=
+		</data>
 		<key>Resources/recipes/steam/730.json</key>
 		<data>
 		4n/dDtVSE147WTHu/yYkRMmRg44=
@@ -75,6 +79,13 @@
 			<key>hash2</key>
 			<data>
 			Mw6k1lEDLtl/aMGxD7Vr9MVpyIvE7XNOIJNFsBFnFxc=
+			</data>
+		</dict>
+		<key>Resources/recipes/steam/2895990.json</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			UwjCaiEz3KbsvIJUrnNTIT1gCq6q0zLILlooTi/nKRQ=
 			</data>
 		</dict>
 		<key>Resources/recipes/steam/730.json</key>

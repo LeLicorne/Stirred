@@ -329,3 +329,75 @@ struct LauncherHelperTests {
         #expect(!Launcher.isLoggedOn(connectionLogTail: "nothing useful"))
     }
 }
+
+@Suite("Report accuracy")
+struct ReportAccuracyTests {
+    private func setup() throws -> (StirredPaths, URL, URL) {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-acc-\(UUID().uuidString)")
+        let paths = StirredPaths(root: tmp)
+        let prefix = paths.prefix(named: "steam")
+        let users = prefix.appendingPathComponent("drive_c/users/jo/AppData/LocalLow")
+        try FileManager.default.createDirectory(at: users, withIntermediateDirectories: true)
+        return (paths, prefix, users)
+    }
+
+    @Test func ignoresOtherGamesLogsAndSteamDumps() throws {
+        let (paths, prefix, users) = try setup()
+        defer { try? FileManager.default.removeItem(at: paths.root) }
+        let mine = users.appendingPathComponent("A/Muck"), other = users.appendingPathComponent("B/Cat")
+        try FileManager.default.createDirectory(at: mine, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+        try "Mono path[0] = 'C:/Steam/steamapps/common/Muck/Muck_Data'\nall good".write(
+            to: mine.appendingPathComponent("Player.log"), atomically: true, encoding: .utf8)
+        try "Mono path[0] = 'C:/Steam/steamapps/common/Cat Purrtrol/x'\nCrash!!!".write(
+            to: other.appendingPathComponent("Player.log"), atomically: true, encoding: .utf8)
+        let dumps = prefix.appendingPathComponent("drive_c/Program Files (x86)/Steam/dumps")
+        try FileManager.default.createDirectory(at: dumps, withIntermediateDirectories: true)
+        try Data().write(to: dumps.appendingPathComponent("assert_steam.exe_1.dmp"))
+
+        let game = Game(store: "steam", storeID: "1", name: "Muck",
+                        installDirectory: URL(fileURLWithPath: "/x/steamapps/common/Muck"))
+        let plan = LaunchPlanner.plan(recipe: nil, detectedAPIs: [], hardware: HardwareProfile(memoryGB: 16))
+        let system = SystemInfo(macOS: "27", chip: "M4", memoryGB: 16, lowPowerMode: false, onBattery: false)
+        var rec = try SessionRecorder.begin(game: game, plan: plan, engine: "e", processNeedle: "Muck.exe",
+                                            paths: paths, system: system, now: Date().addingTimeInterval(-30))
+        let report = try rec.finish(paths: paths, prefix: prefix, redactor: Redactor(home: "/Users/jo", user: "jo"))
+        let md = try String(contentsOf: report, encoding: .utf8)
+        #expect(md.contains("Crash detected | no"))
+        #expect(!md.contains("assert_steam"))
+    }
+
+    @Test func countsGraphicsProblemsAndParsesFindings() {
+        let rec = SessionRecord(
+            gameName: "G", store: "steam", storeID: "1", backend: "dxvk", latency: "low", engine: "e",
+            processNeedle: "G.exe", startedAt: Date(timeIntervalSince1970: 0), endedAt: nil,
+            environment: [:], planWarnings: [],
+            system: SystemInfo(macOS: "27", chip: "M4", memoryGB: 16, lowPowerMode: false, onBattery: false), samples: [])
+        let md = ReportBuilder.markdown(record: rec, crashDetected: false, newDumps: [], keyLines: [],
+                                        excerptNames: [], problems: ["pipeline compile failures": 3])
+        let found = ReportBuilder.findingsSection(of: md)
+        #expect(found.contains { $0.contains("3x pipeline compile failures") })
+        #expect(LogCollector.count(of: "ab", in: "ab ab ab") == 3)
+    }
+}
+
+@Suite("Assertions are not crashes")
+struct AssertionDumpTests {
+    @Test func assertDumpIsWarningNotCrash() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-assert-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let paths = StirredPaths(root: tmp)
+        let prefix = paths.prefix(named: "steam")
+        let dumps = prefix.appendingPathComponent("drive_c/Program Files (x86)/Steam/dumps")
+        try FileManager.default.createDirectory(at: dumps, withIntermediateDirectories: true)
+        try Data().write(to: dumps.appendingPathComponent("assert_muck.exe_1.dmp"))
+        let game = Game(store: "steam", storeID: "1", name: "Muck", installDirectory: nil)
+        let plan = LaunchPlanner.plan(recipe: nil, detectedAPIs: [], hardware: HardwareProfile(memoryGB: 16))
+        let system = SystemInfo(macOS: "27", chip: "M4", memoryGB: 16, lowPowerMode: false, onBattery: false)
+        var rec = try SessionRecorder.begin(game: game, plan: plan, engine: "e", processNeedle: "Muck.exe",
+                                            paths: paths, system: system, now: Date().addingTimeInterval(-30))
+        let md = try String(contentsOf: try rec.finish(paths: paths, prefix: prefix), encoding: .utf8)
+        #expect(md.contains("Crash detected | no"))
+        #expect(md.contains("assertion dump"))
+    }
+}

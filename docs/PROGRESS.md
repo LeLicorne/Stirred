@@ -121,6 +121,21 @@ Results of real tests on M4 / macOS 27 / Gcenx Wine 11.21 (both staging and deve
 - Ideas next: first-run onboarding that runs assemble-engine/install-components, "Install by appid" (`steam://install/<id>`),
   controller navigation, menu-bar mode, FPS capture (needs a DXVK patch or Metal HUD), HoloCure/Trackmania tests.
 
+
+## UI polish + report accuracy (2026-11-07, night)
+- Activity now shows a native summary (metric cards, CPU/GPU chart, findings with icons, "Played" time = first to last sample,
+  collapsible full report); list is top-aligned and auto-selects the latest session. Logs tab: search + "Errors only".
+  Library: equal-height cards, Cat Purrtrol greyed out (recipe `unsupported`, verified).
+- `open build/Stirred.app --args -section activity|logs|library` opens a tab directly (used for screenshots).
+- **Report bug fixed**: a session was wrongly flagged as crashed. Causes: (1) Player.log of *other* games was read (now only the log whose
+  first lines mention the game's install folder, `installDirName`); (2) Steam's `assert_<exe>.dmp` is a non-fatal assertion, not a crash
+  (now a finding, not a crash flag; only non-assert dumps for this exe count); (3) regenerating an old report re-read the newest logs
+  (now bounded to [start-60 s, end+180 s] and keeps the original end time).
+- New finding: counts of DXVK/MoltenVK problems in the DXVK log: "Failed to compile pipeline" (MoltenVK: int4 vertex attributes read as
+  UInt4) and "Transform feedback not supported" (D3D11 geometry-shader stream output). They can make objects/effects invisible. Muck shows
+  ~9 pipeline failures + 1 stream-output error per run; the user saw no visible problem yet. Worth investigating if a game looks wrong.
+- 32 tests pass.
+
 ## NOT done / where I stopped
 1. **Steam login not done**: Steam is now running and shows the login form (no more black window). User must sign in with the test account.
    screen (started with `stirredctl steam`-equivalent flags). If it is closed: `swift run stirredctl steam`.

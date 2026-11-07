@@ -59,6 +59,8 @@ public struct SessionRecord: Codable, Sendable, Equatable {
     public var planWarnings: [String]
     public var system: SystemInfo
     public var samples: [SessionSample]
+    /// Folder name of the game under steamapps/common: used to tell this game's logs from other games'.
+    public var installDirName: String? = nil
 }
 
 // MARK: - Sampling
@@ -137,25 +139,37 @@ public enum LogCollector {
         return String(decoding: data.filter { $0 != 0 }, as: UTF8.self)
     }
 
+    /// First `maxBytes` of a file as text (Unity prints the game's own folder in its first lines).
+    public static func head(_ url: URL, maxBytes: Int = 4096) -> String? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: maxBytes) else { return nil }
+        return String(decoding: data.filter { $0 != 0 }, as: UTF8.self)
+    }
+
+    public static func count(of needle: String, in text: String) -> Int {
+        text.components(separatedBy: needle).count - 1
+    }
+
     /// Files called `name` under `root`, modified at or after `date`.
-    public static func files(named name: String, under root: URL, after date: Date) -> [URL] {
+    public static func files(named name: String, under root: URL, after date: Date, before end: Date = .distantFuture) -> [URL] {
         guard let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.contentModificationDateKey]) else { return [] }
         var found: [URL] = []
         for case let url as URL in walker where url.lastPathComponent == name {
             if let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
-               modified >= date { found.append(url) }
+               modified >= date, modified <= end { found.append(url) }
         }
         return found
     }
 
     /// Files in `directory` (non-recursive) with the given extension, modified at or after `date`.
-    public static func recentFiles(in directory: URL, extension ext: String? = nil, after date: Date) -> [URL] {
+    public static func recentFiles(in directory: URL, extension ext: String? = nil, after date: Date, before end: Date = .distantFuture) -> [URL] {
         let urls = (try? FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
         return urls.filter { url in
             guard ext == nil || url.pathExtension == ext else { return false }
             let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-            return (modified ?? .distantPast) >= date
+            return (modified ?? .distantPast) >= date && (modified ?? .distantPast) <= end
         }
     }
 
@@ -177,9 +191,12 @@ public enum ReportBuilder {
     }
 
     /// Hints, not verdicts: they are derived from coarse samples.
-    public static func findings(for record: SessionRecord, crashDetected: Bool) -> [String] {
-        var out: [String] = []
+    public static func findings(for record: SessionRecord, crashDetected: Bool, problems: [String: Int] = [:], extra: [String] = []) -> [String] {
+        var out: [String] = extra
         if crashDetected { out.append("CRASH: a crash marker or a new crash dump was found (see excerpts).") }
+        for (name, n) in problems.sorted(by: { $0.key < $1.key }) where n > 0 {
+            out.append("\(n)x \(name) (MoltenVK/Metal limitation): some objects or effects may be missing or invisible.")
+        }
         if record.system.lowPowerMode { out.append("Low Power Mode was ON: macOS caps CPU/GPU speed (measured ~25-30 FPS vs ~130 FPS).") }
         if record.system.onBattery { out.append("The Mac was on battery: performance is reduced.") }
         let live = record.samples.filter { $0.processCount > 0 }
@@ -204,9 +221,20 @@ public enum ReportBuilder {
         return out
     }
 
+    /// Bullet lines under "## Findings" of a generated report.
+    public static func findingsSection(of markdown: String) -> [String] {
+        var inside = false
+        var out: [String] = []
+        for line in markdown.split(separator: "\n", omittingEmptySubsequences: false) {
+            if line.hasPrefix("## ") { inside = line.hasPrefix("## Findings"); continue }
+            if inside, line.hasPrefix("- ") { out.append(String(line.dropFirst(2))) }
+        }
+        return out
+    }
+
     public static func markdown(
         record: SessionRecord, crashDetected: Bool, newDumps: [String],
-        keyLines: [String], excerptNames: [String]
+        keyLines: [String], excerptNames: [String], problems: [String: Int] = [:], extra: [String] = []
     ) -> String {
         let live = record.samples.filter { $0.processCount > 0 }
         let duration = record.endedAt.map { Int($0.timeIntervalSince(record.startedAt)) }
@@ -219,7 +247,7 @@ public enum ReportBuilder {
         md += "## System\n\(record.system.chip), \(record.system.memoryGB) GB, macOS \(record.system.macOS)\n"
         md += "- Low Power Mode: \(record.system.lowPowerMode ? "ON" : "off")\n- On battery: \(record.system.onBattery ? "yes" : "no")\n\n"
         md += "## Findings\n"
-        let found = findings(for: record, crashDetected: crashDetected)
+        let found = findings(for: record, crashDetected: crashDetected, problems: problems, extra: extra)
         md += found.isEmpty ? "- Nothing notable.\n\n" : found.map { "- \($0)\n" }.joined() + "\n"
         md += "## Performance samples (\(live.count))\n"
         if let cpu = stats(live.map(\.cpuPercent)) { md += "- CPU of the game: avg \(Int(cpu.avg))%, max \(Int(cpu.max))% (100% = one core, approximate)\n" }
@@ -259,7 +287,8 @@ public struct SessionRecorder: Sendable {
             gameName: game.name, store: game.store, storeID: game.storeID,
             backend: plan.backend.rawValue, latency: plan.latency.rawValue, engine: engine,
             processNeedle: processNeedle, startedAt: now, endedAt: nil,
-            environment: plan.environment, planWarnings: plan.warnings, system: system, samples: [])
+            environment: plan.environment, planWarnings: plan.warnings, system: system, samples: [],
+            installDirName: game.installDirectory?.lastPathComponent)
         let recorder = SessionRecorder(directory: directory, record: record)
         try recorder.save()
         let latest = sessionsDirectory(paths).appendingPathComponent("latest")
@@ -287,7 +316,8 @@ public struct SessionRecorder: Sendable {
     /// Collects logs, writes `report.md`, `samples.csv`, `excerpts/*` and returns the report URL.
     @discardableResult
     public mutating func finish(paths: StirredPaths, prefix: URL, redactor: Redactor = Redactor(), now: Date = Date()) throws -> URL {
-        record.endedAt = now
+        if record.endedAt == nil { record.endedAt = now }   // regenerating an old report keeps its real end
+        let until = (record.endedAt ?? now).addingTimeInterval(180)
         let fm = FileManager.default
         let steamRoot = prefix.appendingPathComponent("drive_c/Program Files (x86)/Steam", isDirectory: true)
         let since = record.startedAt.addingTimeInterval(-60)
@@ -299,18 +329,37 @@ public struct SessionRecorder: Sendable {
             if let text = LogCollector.tail(url, maxBytes: maxBytes) { excerpts.append((name, redactor.redact(text))) }
         }
         let users = prefix.appendingPathComponent("drive_c/users", isDirectory: true)
-        for (i, log) in LogCollector.files(named: "Player.log", under: users, after: since).enumerated() {
-            add("unity-Player\(i == 0 ? "" : "-\(i)").log", log)
+        let stem = record.processNeedle.lowercased().replacingOccurrences(of: ".exe", with: "")
+        var unityIndex = 0
+        for log in LogCollector.files(named: "Player.log", under: users, after: since, before: until) {
+            // Unity prints the game's own folder first: skip other games' logs.
+            if let dir = record.installDirName, let head = LogCollector.head(log),
+               !head.localizedCaseInsensitiveContains(dir) { continue }
+            add("unity-Player\(unityIndex == 0 ? "" : "-\(unityIndex)").log", log)
+            unityIndex += 1
         }
         add("steam-gameprocess_log.txt", steamRoot.appendingPathComponent("logs/gameprocess_log.txt"), maxBytes: 16_000)
         add("steam-console_log.txt", steamRoot.appendingPathComponent("logs/console_log.txt"), maxBytes: 16_000)
-        for url in LogCollector.recentFiles(in: paths.logs.appendingPathComponent("dxvk"), extension: "log", after: since) {
+        for url in LogCollector.recentFiles(in: paths.logs.appendingPathComponent("dxvk"), extension: "log", after: since, before: until)
+        where stem.isEmpty || url.lastPathComponent.lowercased().hasPrefix(stem) {
             add("dxvk-\(url.lastPathComponent)", url, maxBytes: 32_000)
         }
 
-        let dumps = LogCollector.recentFiles(in: steamRoot.appendingPathComponent("dumps"), after: since).map(\.lastPathComponent)
-        let crash = !dumps.isEmpty || excerpts.contains { $0.text.contains("Crash!!!") }
+        // Only this game's crash dumps (Steam's own assert_steam/crash_steamsysinfo dumps are not the game's).
+        let gameDumps = LogCollector.recentFiles(in: steamRoot.appendingPathComponent("dumps"), after: since, before: until)
+            .map(\.lastPathComponent).filter { stem.isEmpty || $0.lowercased().contains(stem) }
+        // Steam writes `assert_<exe>` dumps for non-fatal assertions (e.g. overlay): the game usually keeps running.
+        let assertions = gameDumps.filter { $0.hasPrefix("assert_") }
+        let dumps = gameDumps.filter { !$0.hasPrefix("assert_") }
+        let extra = assertions.isEmpty ? [] : ["Steam recorded \(assertions.count) assertion dump(s) (\(assertions[0])). Usually non-fatal (the game keeps running); only a concern if the game also closed."]
+        let crash = !dumps.isEmpty || excerpts.contains { $0.name.hasPrefix("unity-Player") && $0.text.contains("Crash!!!") }
         for (name, text) in excerpts { try text.write(to: excerptsDir.appendingPathComponent(name), atomically: true, encoding: .utf8) }
+
+        let graphicsText = excerpts.filter { $0.name.hasPrefix("dxvk-") }.map(\.text).joined(separator: "\n")
+        let problems = [
+            "pipeline compile failures": LogCollector.count(of: "Failed to compile pipeline", in: graphicsText),
+            "geometry-shader stream output unsupported": LogCollector.count(of: "Transform feedback not supported", in: graphicsText),
+        ]
 
         var csv = "t,gpu_percent,cpu_percent,rss_mb,processes\n"
         for s in record.samples { csv += "\(String(format: "%.1f", s.t)),\(s.gpuPercent.map(String.init) ?? ""),\(String(format: "%.1f", s.cpuPercent)),\(s.rssMB),\(s.processCount)\n" }
@@ -319,7 +368,7 @@ public struct SessionRecorder: Sendable {
         let unity = excerpts.first { $0.name.hasPrefix("unity-Player") }?.text ?? ""
         let md = ReportBuilder.markdown(
             record: record, crashDetected: crash, newDumps: dumps,
-            keyLines: LogCollector.keyLines(in: unity), excerptNames: excerpts.map(\.name))
+            keyLines: LogCollector.keyLines(in: unity), excerptNames: excerpts.map(\.name), problems: problems, extra: extra)
         let report = directory.appendingPathComponent("report.md")
         try md.write(to: report, atomically: true, encoding: .utf8)
         try save()
