@@ -17,7 +17,8 @@ func options() -> LaunchOptions {
         guard let value = LatencyProfile(rawValue: args[i + 1]) else { fail("latency must be balanced, low or lowest") }
         latency = value
     }
-    return LaunchOptions(latency: latency, hud: args.contains("--hud"), asyncShaders: args.contains("--async"))
+    return LaunchOptions(latency: latency, hud: args.contains("--hud"), asyncShaders: args.contains("--async"),
+                         launchMode: args.contains("--via-steam") ? .steam : (args.contains("--direct") ? .direct : nil))
 }
 
 func intOption(_ name: String, default value: Int) -> Int {

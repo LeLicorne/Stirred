@@ -4,9 +4,11 @@ public struct LaunchOptions: Sendable, Equatable {
     public var latency: LatencyProfile?
     public var hud: Bool
     public var asyncShaders: Bool
+    /// Overrides the recipe (e.g. run a game's own launcher/updater through Steam).
+    public var launchMode: LaunchMode?
 
-    public init(latency: LatencyProfile? = nil, hud: Bool = false, asyncShaders: Bool = false) {
-        self.latency = latency; self.hud = hud; self.asyncShaders = asyncShaders
+    public init(latency: LatencyProfile? = nil, hud: Bool = false, asyncShaders: Bool = false, launchMode: LaunchMode? = nil) {
+        self.latency = latency; self.hud = hud; self.asyncShaders = asyncShaders; self.launchMode = launchMode
     }
 }
 
@@ -53,7 +55,9 @@ public struct Launcher: Sendable {
 
     public func plan(for game: Game, options: LaunchOptions = LaunchOptions()) -> LaunchPlan {
         let apis = GraphicsDetector.detect(executables: GameExecutableFinder.candidates(in: game.installDirectory ?? paths.root))
-        return LaunchPlanner.plan(recipe: recipe(for: game), detectedAPIs: apis, latency: options.latency)
+        var plan = LaunchPlanner.plan(recipe: recipe(for: game), detectedAPIs: apis, latency: options.latency)
+        if let mode = options.launchMode { plan.launchMode = mode }
+        return plan
     }
 
     // MARK: Graphics

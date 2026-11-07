@@ -183,6 +183,18 @@ Results of real tests on M4 / macOS 27 / Gcenx Wine 11.21 (both staging and deve
   Trackmania stayed "Stopping" in Steam because Ubisoft Connect processes were still alive.
 - Not verified yet: what the user sees (FPS, input lag, rendering), gameplay, longer session stability. 34 tests pass.
 
+
+## Warframe: renders great, needs its launcher to update (2026-11-07, 03:50)
+- User screenshots: login screen at ~93-95 FPS, image perfect, DXVK works. Login says "An updated version of Warframe is available! Please exit and run the launcher."
+- The Warframe launcher (Tools/Launcher.exe, x64, Chromium) hangs after `BinariesBP_LAUNCHER` in Launcher.log when its UI is blank:
+  it needs its web UI to continue. It hashes its own exe, so wrapping it is not an option.
+- DXVK for Launcher.exe did NOT help. **What worked**: disable Direct3D for that exe only:
+  `wine reg add HKCU\Software\Wine\AppDefaults\Launcher.exe\DllOverrides /v d3d11|dxgi|d3d10core /d "" /f`. Chromium then falls back to
+  SwiftShader software rendering and the UI draws (EULA page with an "I AGREE" button; the EULA text area still looked empty).
+  This registry trick is simpler than the steamwebhelper wrapper: try it for Ubisoft's UplayWebCore.exe too.
+- New CLI flags: `--via-steam` / `--direct` override the recipe's launch mode (`LaunchOptions.launchMode`).
+- Next: user clicks "I AGREE", the launcher updates (watch Launcher.log), then `stirredctl run warframe` (direct) and log in with a Warframe account.
+
 ## NOT done / where I stopped
 1. **Steam login not done**: Steam is now running and shows the login form (no more black window). User must sign in with the test account.
    screen (started with `stirredctl steam`-equivalent flags). If it is closed: `swift run stirredctl steam`.

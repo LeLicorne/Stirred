@@ -1,1 +1,19 @@
-{"appid":230410,"name":"Warframe","status":"unknown","verified":false,"graphics":"dxvk","latency":"low","launch_mode":"direct","launch_args":["-dx11:1","-dx12:0","-threadedworker:1","-cluster:public","-language:en","-fullscreen:0","-registry:Steam"],"notes":"Its launcher (Tools/Launcher.exe, Chromium) renders a blank page under Wine and verifies its own hash, so the game is started directly in DX11 windowed mode. 52 GB installed through Steam. Untested."}
+{
+ "appid": 230410,
+ "name": "Warframe",
+ "status": "unknown",
+ "verified": false,
+ "graphics": "dxvk",
+ "latency": "low",
+ "launch_mode": "direct",
+ "launch_args": [
+  "-dx11:1",
+  "-dx12:0",
+  "-threadedworker:1",
+  "-cluster:public",
+  "-language:en",
+  "-fullscreen:0",
+  "-registry:Steam"
+ ],
+ "notes": "Plays at ~93-95 FPS on the login screen via DXVK-macOS (M4). The game demands an updated build, which only Tools/Launcher.exe (Chromium) can download: its UI is blank under Wine unless Direct3D is disabled for Launcher.exe (HKCU\\Software\\Wine\\AppDefaults\\Launcher.exe\\DllOverrides d3d11/dxgi/d3d10core = '') so Chromium falls back to software rendering. Run it once with `stirredctl run warframe --via-steam`, accept the EULA, let it update, then play with the direct launch."
+}
