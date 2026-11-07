@@ -206,6 +206,15 @@ Results of real tests on M4 / macOS 27 / Gcenx Wine 11.21 (both staging and deve
   available", run `stirredctl run warframe --via-steam` again and wait for the launcher log to finish.
 - Launcher GPU process spins at ~80% CPU while the launcher is open: close the launcher after the update.
 
+
+## Warframe PLAYS (2026-11-07, 04:00)
+- User logged in and played: **~90 FPS steady on low graphics, ~37 FPS on medium** (M4, 16 GB, DXVK-macOS, direct launch). Image correct, ship scene
+  rendered fine. Recipe is now `playable` + verified.
+- Procedure that worked: DXVK in Warframe/Tools + `setup-warframe-launcher.sh` -> `stirredctl run warframe --via-steam` (launcher updates, window stays white)
+  -> close launcher -> `stirredctl run warframe` (direct, recipe). The game asks for an update again after each Warframe patch: repeat the launcher step.
+- Not measured: input latency in real gameplay (user said performance was good), long-session stability, matchmaking/online play quality.
+- Idea: make the app offer "Update via launcher" for games whose recipe has `launch_mode: direct` + an updater (Warframe), and a graphics-preset hint.
+
 ## NOT done / where I stopped
 1. **Steam login not done**: Steam is now running and shows the login form (no more black window). User must sign in with the test account.
    screen (started with `stirredctl steam`-equivalent flags). If it is closed: `swift run stirredctl steam`.
