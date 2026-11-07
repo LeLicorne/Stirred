@@ -187,3 +187,36 @@ struct GraphicsSetupTests {
         #expect(GameExecutableFinder.candidates(in: tmp).map(\.lastPathComponent) == ["Game.exe"])
     }
 }
+
+@Suite("Latency profiles")
+struct LatencyTests {
+    @Test func profilesRenderExpectedSettings() {
+        #expect(DXVKConfig.render(latency: .balanced).contains("dxgi.maxFrameLatency = 2"))
+        #expect(DXVKConfig.render(latency: .low).contains("dxgi.maxFrameLatency = 1"))
+        let lowest = DXVKConfig.render(latency: .lowest)
+        #expect(lowest.contains("dxgi.syncInterval = 0") && lowest.contains("dxgi.tearFree = False"))
+    }
+
+    @Test func hudAndAsyncAreOptIn() {
+        let plain = DXVKConfig.render(latency: .low)
+        #expect(!plain.contains("hud") && !plain.contains("enableAsync"))
+        let full = DXVKConfig.render(latency: .low, hud: true, asyncShaders: true)
+        #expect(full.contains("dxvk.hud = fps,frametimes") && full.contains("dxvk.enableAsync = True"))
+    }
+
+    @Test func plannerDefaultsToLowAndRecipeOverrides() {
+        #expect(LaunchPlanner.plan(recipe: nil, detectedAPIs: [.d3d11], hardware: HardwareProfile(memoryGB: 16)).latency == .low)
+        let recipe = Recipe(appid: 1, name: "X", status: .playable, latency: .lowest)
+        #expect(LaunchPlanner.plan(recipe: recipe, detectedAPIs: [], hardware: HardwareProfile(memoryGB: 16)).latency == .lowest)
+        #expect(LaunchPlanner.plan(recipe: recipe, detectedAPIs: [], hardware: HardwareProfile(memoryGB: 16), latency: .balanced).latency == .balanced)
+    }
+}
+
+@Suite("Power advice")
+struct PowerAdviceTests {
+    @Test func warnsOnLowPowerAndBattery() {
+        let both = PowerAdvice.warnings(for: PowerState(lowPowerMode: true, onBattery: true))
+        #expect(both.count == 2)
+        #expect(PowerAdvice.warnings(for: PowerState(lowPowerMode: false, onBattery: false)).isEmpty)
+    }
+}

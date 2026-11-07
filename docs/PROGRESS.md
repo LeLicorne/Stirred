@@ -82,6 +82,19 @@ Results of real tests on M4 / macOS 27 / Gcenx Wine 11.21 (both staging and deve
 - Next: install a 64-bit DX11 game (user clicks Install in the Steam window), run `stirredctl run <appid>`, ask the user what they
   see, record the recipe. Then DX9 via the same DXVK-macOS (d3d9.dll is in the package but not installed yet).
 
+
+## Muck verified + performance findings (2026-11-07, evening)
+- **Muck (appid 1625450) is playable** (recipe verified). Unity 2019.4, 64-bit, DX11 through DXVK-macOS 1.10.3 + MoltenVK.
+- **Biggest FPS factor was macOS Low Power Mode + battery**: 24-30 FPS (flat ~30 even in the nearly empty menu) -> **~130 FPS** once
+  plugged in with Low Power Mode off and graphics on low. `PowerState`/`PowerAdvice` now warn in `doctor` and `plan`/`run`.
+- Input latency: `dxgi.maxFrameLatency=1` + vsync off (`--latency lowest`) felt "much better" to the user; in-game vsync off helped too.
+- Per-game `dxvk.conf` also supports `--hud` (fps, frametimes, drawcalls, pipelines, compiler, memory) and `--async`
+  (shader compilation in background). Both are opt-in flags of `stirredctl run`.
+- HoloCure (appid 2420510, Windows-only, GameMaker, 64-bit) is installed but not tested yet: Steam showed a "Grab a controller" dialog
+  that must be dismissed by the user (clicks on Wine dialogs did not register at first).
+- Still open: Wine input path latency (needs a Wine rebuild to change), MoltenVK tuning (perf only), CPU vs GPU bound at high graphics
+  (not measured now that power is fixed), Warframe/Trackmania (not installed), DX9 (d3d9.dll in package, not wired), DX12.
+
 ## NOT done / where I stopped
 1. **Steam login not done**: Steam is now running and shows the login form (no more black window). User must sign in with the test account.
    screen (started with `stirredctl steam`-equivalent flags). If it is closed: `swift run stirredctl steam`.

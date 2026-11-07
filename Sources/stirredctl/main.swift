@@ -39,10 +39,17 @@ func executables(in directory: URL?, maxDepth: Int = 2) -> [URL] {
     return found
 }
 
+/// `--latency balanced|low|lowest` anywhere in the arguments.
+func latencyOption() -> LatencyProfile? {
+    guard let i = args.firstIndex(of: "--latency"), i + 1 < args.count else { return nil }
+    guard let value = LatencyProfile(rawValue: args[i + 1]) else { fail("latency must be balanced, low or lowest") }
+    return value
+}
+
 func plan(for game: Game) -> LaunchPlan {
     let recipe = game.steamAppID.flatMap { recipeRepository().recipe(forSteamAppID: $0) }
     let apis = GraphicsDetector.detect(executables: executables(in: game.installDirectory))
-    return LaunchPlanner.plan(recipe: recipe, detectedAPIs: apis)
+    return LaunchPlanner.plan(recipe: recipe, detectedAPIs: apis, latency: latencyOption())
 }
 
 func findInstalledGame(_ appID: String) throws -> Game {
@@ -63,7 +70,8 @@ func prepareGraphics(for game: Game, plan: LaunchPlan) async throws {
     for exe in GameExecutableFinder.candidates(in: dir) {
         let arch = PEInfo.architecture(ofFile: exe)
         guard arch == .x86 || arch == .x64 else { continue }
-        try DXVKInstaller.install(package: package, executable: exe, architecture: arch)
+        try DXVKInstaller.install(package: package, executable: exe, architecture: arch, latency: plan.latency,
+                                    hud: args.contains("--hud"), asyncShaders: args.contains("--async"))
         for command in DXVKInstaller.registryCommands(executableName: exe.lastPathComponent) {
             _ = try await runner.runAndWait(arguments: command)
         }
@@ -72,11 +80,11 @@ func prepareGraphics(for game: Game, plan: LaunchPlan) async throws {
 }
 
 func printPlan(_ plan: LaunchPlan) {
-    print("backend:  \(plan.backend.rawValue)")
+    print("backend:  \(plan.backend.rawValue)   latency: \(plan.latency.rawValue)")
     print("env:      \(plan.environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " "))")
     if !plan.gameArguments.isEmpty { print("args:     \(plan.gameArguments.joined(separator: " "))") }
     if !plan.requiredComponents.isEmpty { print("needs:    \(plan.requiredComponents.joined(separator: ", "))") }
-    for warning in plan.warnings { print("warning:  \(warning)") }
+    for warning in plan.warnings + PowerAdvice.warnings(for: .current) { print("warning:  \(warning)") }
     if let reason = plan.blockedReason { print("BLOCKED:  \(reason)") }
 }
 
@@ -89,6 +97,7 @@ func run() async throws {
     case "doctor":
         print("macOS:     \(ProcessInfo.processInfo.operatingSystemVersionString)")
         print("memory:    \(HardwareProfile.current.memoryGB) GB")
+        for warning in PowerAdvice.warnings(for: .current) { print("power:     \(warning)") }
         print("rosetta:   \(FileManager.default.fileExists(atPath: "/Library/Apple/usr/share/rosetta/rosetta") ? "installed" : "MISSING (softwareupdate --install-rosetta)")")
         print("root:      \(paths.root.path)")
         if let engine = EngineLocator.preferred(paths: paths) {

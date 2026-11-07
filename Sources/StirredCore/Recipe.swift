@@ -24,17 +24,18 @@ public struct Recipe: Codable, Sendable, Equatable {
     public var env: [String: String]?
     public var dllOverrides: [String: String]?
     public var launchArgs: [String]?
+    public var latency: LatencyProfile?
     public var notes: String?
 
     public init(
         appid: Int, name: String, status: CompatStatus, verified: Bool = false,
         blockers: [String]? = nil, graphics: GraphicsBackend? = nil,
         env: [String: String]? = nil, dllOverrides: [String: String]? = nil,
-        launchArgs: [String]? = nil, notes: String? = nil
+        launchArgs: [String]? = nil, latency: LatencyProfile? = nil, notes: String? = nil
     ) {
         self.appid = appid; self.name = name; self.status = status; self.verified = verified
         self.blockers = blockers; self.graphics = graphics; self.env = env
-        self.dllOverrides = dllOverrides; self.launchArgs = launchArgs; self.notes = notes
+        self.dllOverrides = dllOverrides; self.launchArgs = launchArgs; self.latency = latency; self.notes = notes
     }
 }
 
