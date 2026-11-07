@@ -159,6 +159,17 @@ Results of real tests on M4 / macOS 27 / Gcenx Wine 11.21 (both staging and deve
   Account: the user must create/link a Ubisoft account themselves (credentials are never typed by Claude).
 - Seed recipes had `"graphics":"dxmt"` (wrong: DXMT cannot work here); removed from Trackmania/Warframe/CS2.
 
+
+## Trackmania attempt #2: Ubisoft Connect wrapper (2026-11-07, 03:20) — still NOT playable
+- `Scripts/install-uplay-wrapper.sh` wraps `UplayWebCore.exe` (CEF) with `--disable-gpu --single-process` (the Wrapper C source now takes
+  `-DREAL_EXE=`). Effect: UplayWebCore stops spinning (0% CPU) but the launcher still does not get anywhere:
+  `UplayService.exe` x2 stay at ~100% CPU, `upc.exe` (main app) is gone, launcher_log ends at "Environment is PROD", no Ubisoft window.
+- Running `upc.exe -upc_uplay_id 7015` by hand exits with code 1 after a moment with NO Wine `err:` lines: an application-level exit.
+- Not tried: create `HKCR\uplay` protocol keys (service_log complains), vcrun/webview2 components, other Wine builds (Gcenx devel was only
+  tested on Unity), Ubisoft Connect `-offline`-style flags, installing Ubisoft Connect from Ubisoft's own installer instead of Steam's bundled one.
+- Decision: park Trackmania (recipe `experimental`, Play still allowed). Wrapper stays installed (harmless).
+- HoloCure is now `playable` + verified (user reached the main menu and played).
+
 ## NOT done / where I stopped
 1. **Steam login not done**: Steam is now running and shows the login form (no more black window). User must sign in with the test account.
    screen (started with `stirredctl steam`-equivalent flags). If it is closed: `swift run stirredctl steam`.

@@ -18,6 +18,9 @@
 #include <wchar.h>
 #include <stdlib.h>
 
+#ifndef REAL_EXE
+#define REAL_EXE L"steamwebhelper_real.exe"   /* Ubisoft Connect build: -DREAL_EXE=L\"UplayWebCore_real.exe\" */
+#endif
 #define EXTRA_FLAGS L" --disable-gpu --single-process"
 
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show)
@@ -45,7 +48,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show)
     *slash = 0;
 
     wchar_t real[MAX_PATH];
-    if (swprintf(real, MAX_PATH, L"%ls\\steamwebhelper_real.exe", self) < 0) return 2;
+    if (swprintf(real, MAX_PATH, L"%ls\\" REAL_EXE, self) < 0) return 2;
 
     size_t cap = wcslen(real) + wcslen(rest) + wcslen(EXTRA_FLAGS) + 8;
     wchar_t *line = (wchar_t *)malloc(cap * sizeof(wchar_t));
