@@ -401,3 +401,13 @@ struct AssertionDumpTests {
         #expect(md.contains("assertion dump"))
     }
 }
+
+@Suite("Launch mode")
+struct LaunchModeTests {
+    @Test func plannerDefaultsToSteamAndHonoursRecipe() {
+        let hw = HardwareProfile(memoryGB: 16)
+        #expect(LaunchPlanner.plan(recipe: nil, detectedAPIs: [], hardware: hw).launchMode == .steam)
+        let r = Recipe(appid: 1, name: "X", status: .playable, launchMode: .direct)
+        #expect(LaunchPlanner.plan(recipe: r, detectedAPIs: [], hardware: hw).launchMode == .direct)
+    }
+}

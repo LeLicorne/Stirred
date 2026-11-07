@@ -20,6 +20,7 @@ public struct LaunchPlan: Sendable, Equatable {
     /// Non-nil means we refuse to launch and explain why.
     public var blockedReason: String?
     public var latency: LatencyProfile
+    public var launchMode: LaunchMode
 }
 
 public enum LaunchPlanner {
@@ -88,6 +89,7 @@ public enum LaunchPlanner {
         return LaunchPlan(
             backend: backend, environment: env, gameArguments: recipe?.launchArgs ?? [],
             warnings: warnings, requiredComponents: components, blockedReason: blocked,
-            latency: latency ?? recipe?.latency ?? .low)
+            latency: latency ?? recipe?.latency ?? .low,
+            launchMode: recipe?.launchMode ?? .steam)
     }
 }

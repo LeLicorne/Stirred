@@ -83,11 +83,30 @@ public struct SteamProvider: GameStoreProvider {
     public func launch(_ game: Game, plan: LaunchPlan) throws -> Process {
         guard isInstalled else { throw StirredError.steamNotInstalled }
         if let reason = plan.blockedReason { throw StirredError.blocked(reason) }
+        if plan.launchMode == .direct { return try launchDirect(game, plan: plan) }
         var arguments = [steamExecutable.path] + Self.clientFlags + ["-applaunch", game.storeID]
         arguments += plan.gameArguments
         let process = try runner.makeProcess(
             arguments: arguments, extraEnvironment: plan.environment,
             workingDirectory: steamRoot,
+            logFile: logsDirectory.appendingPathComponent("game-\(game.storeID).log"))
+        try process.run()
+        return process
+    }
+
+    /// Runs the game's executable ourselves. Steam must already be running; SteamAppId lets Steamworks find it.
+    func launchDirect(_ game: Game, plan: LaunchPlan) throws -> Process {
+        guard let dir = game.installDirectory, let exe = GameExecutableFinder.candidates(in: dir).first else {
+            throw StirredError.blocked("No game executable found for direct launch.")
+        }
+        var env = plan.environment
+        env["SteamAppId"] = game.storeID
+        env["SteamGameId"] = game.storeID
+        // A directly launched game does not inherit Steam's environment: give it the DXVK log folder explicitly.
+        env["DXVK_LOG_PATH"] = logsDirectory.appendingPathComponent("dxvk", isDirectory: true).path
+        env["DXVK_LOG_LEVEL"] = "info"
+        let process = try runner.makeProcess(
+            arguments: [exe.path] + plan.gameArguments, extraEnvironment: env, workingDirectory: dir,
             logFile: logsDirectory.appendingPathComponent("game-\(game.storeID).log"))
         try process.run()
         return process

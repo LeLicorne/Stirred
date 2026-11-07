@@ -132,6 +132,15 @@ public struct Launcher: Sendable {
         try process.run()
     }
 
+    /// Asks Steam to install a game (Steam shows its own confirmation dialog: the user must accept it).
+    public func requestInstall(appID: Int) throws {
+        let steam = try steam()
+        let process = try steam.runner.makeProcess(
+            arguments: [steam.steamRoot.appendingPathComponent("Steam.exe").path, "steam://install/\(appID)"],
+            workingDirectory: steam.steamRoot)
+        try process.run()
+    }
+
     /// Stops Steam and every Wine process of the engine.
     public func quitSteam() async {
         guard let runner = try? runner() else { return }

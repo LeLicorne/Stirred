@@ -136,6 +136,18 @@ Results of real tests on M4 / macOS 27 / Gcenx Wine 11.21 (both staging and deve
   ~9 pipeline failures + 1 stream-output error per run; the user saw no visible problem yet. Worth investigating if a game looks wrong.
 - 32 tests pass.
 
+
+## HoloCure + Trackmania (2026-11-07, 03:00)
+- **Steam silent start works** (`-silent`): no Steam window appears; Stirred waits for "Logged On" then launches. Verified.
+- Steam's "Grab a controller and kick back!" prompt blocks a normal `-applaunch` of HoloCure and its OK button did not react to clicks.
+  New recipe field `launch_mode: "direct"`: Stirred runs the exe itself with `SteamAppId`/`SteamGameId` set (Steam keeps running).
+  HoloCure uses it: it launched, no crash, DXVK active (`HoloCure.dxvk-cache` created). Direct launches also get `DXVK_LOG_PATH`.
+  Trade-off: no Steam overlay / playtime tracking for direct launches.
+- `stirredctl install <appid>` asks Steam to install a game (`steam://install/<id>`): Steam shows its own dialog, the user must click
+  Install. Trackmania (2225070): free, Windows-only, dialog says 6.67 GB, **needs a Ubisoft account** (user creates/links it).
+- HoloCure visual result not confirmed by the user yet (recipe stays `unknown`/unverified until then).
+- 33 tests pass.
+
 ## NOT done / where I stopped
 1. **Steam login not done**: Steam is now running and shows the login form (no more black window). User must sign in with the test account.
    screen (started with `stirredctl steam`-equivalent flags). If it is closed: `swift run stirredctl steam`.

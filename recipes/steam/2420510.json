@@ -1,0 +1,1 @@
+{"appid":2420510,"name":"HoloCure - Save the Fans!","status":"unknown","verified":false,"graphics":"dxvk","launch_mode":"direct","notes":"GameMaker, Windows-only, 64-bit. Steam's 'Grab a controller' prompt blocks a normal Steam launch, so it is started directly (Steam keeps running for Steamworks)."}

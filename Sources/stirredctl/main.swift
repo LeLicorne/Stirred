@@ -71,6 +71,11 @@ func run() async throws {
     case "steam":
         try launcher.startSteam(silent: args.contains("--silent"))
         print("Steam starting. Log: \(launcher.paths.logs.path)/steam-client.log")
+    case "install":
+        guard args.count > 1, let id = Int(args[1]) else { fail("usage: stirredctl install <appid>") }
+        guard launcher.steamState() == .ready else { fail("Steam is not ready: start it first (`stirredctl steam`) and log in.") }
+        try launcher.requestInstall(appID: id)
+        print("Steam should now show an install dialog for app \(id): accept it there.")
     case "quit":
         await launcher.quitSteam()
         print("Steam stopped")
