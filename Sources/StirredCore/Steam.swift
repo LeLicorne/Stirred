@@ -64,13 +64,13 @@ public struct SteamProvider: GameStoreProvider {
     }
 
     /// Starts the Steam client alone (used for first login and warm-up).
-    public func launchClient() throws -> Process {
+    public func launchClient(silent: Bool = false) throws -> Process {
         guard isInstalled else { throw StirredError.steamNotInstalled }
         // Set at Steam start because games inherit Steam's environment: DXVK then logs every game to one folder.
         let dxvkLogs = logsDirectory.appendingPathComponent("dxvk", isDirectory: true)
         try FileManager.default.createDirectory(at: dxvkLogs, withIntermediateDirectories: true)
         let process = try runner.makeProcess(
-            arguments: [steamExecutable.path] + Self.clientFlags,
+            arguments: [steamExecutable.path] + Self.clientFlags + (silent ? ["-silent"] : []),
             extraEnvironment: ["WINEMSYNC": "1", "DXVK_LOG_PATH": dxvkLogs.path, "DXVK_LOG_LEVEL": "info"],
             workingDirectory: steamRoot,
             logFile: logsDirectory.appendingPathComponent("steam-client.log"))

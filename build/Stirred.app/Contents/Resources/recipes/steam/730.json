@@ -1,0 +1,1 @@
+{"appid":730,"name":"Counter-Strike 2","status":"offline-only","verified":false,"blockers":["vac"],"graphics":"dxmt","launch_args":["-insecure"],"notes":"VAC blocks online play under Wine. -insecure is Valve's official switch: no VAC, bots/local servers only. Never join VAC-secured servers."}

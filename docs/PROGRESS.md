@@ -106,6 +106,21 @@ Results of real tests on M4 / macOS 27 / Gcenx Wine 11.21 (both staging and deve
 - Unity buffers Player.log: if the report is generated while the game still runs, "Key log lines" can be incomplete.
 - Tests: 27 pass (`swift test -j 4`).
 
+
+## The Mac app exists (2026-11-07, night) — START HERE
+- `Scripts/build-app.sh` builds `build/Stirred.app` (ad-hoc signed, 0 EUR). `open build/Stirred.app`.
+  Tabs: **Library** (cover art from Steam's public CDN, compat badge from recipes, per-game latency picker, Play/Stop,
+  FPS-overlay toggle, warnings for Low Power Mode/battery), **Activity** (recorded sessions: report + CPU/GPU chart),
+  **Logs** (live tail of Steam/DXVK logs). Sidebar footer: Steam state + Open Steam / Quit + engine name.
+- Play = `Launcher.play`: starts Steam silently if stopped, waits until "Logged On", installs DXVK for the game, opens a session,
+  asks Steam to launch, then the app samples CPU/GPU until the game exits and writes the report. Same code as `stirredctl`.
+- Shared logic moved to `Sources/StirredCore/Launcher.swift`; `stirredctl run muck --watch` accepts a name or appid.
+- Default engine is now `stirred-wine-11.21` (clone of raw Wine staging, no DXMT); no `STIRRED_ENGINE` needed anymore.
+- NOT verified yet: Steam `-silent` start under Wine (window may still appear / login needed), Play button end-to-end from the UI,
+  first-run when no engine/prefix exists (the app only shows an error banner), installing games without the Steam window.
+- Ideas next: first-run onboarding that runs assemble-engine/install-components, "Install by appid" (`steam://install/<id>`),
+  controller navigation, menu-bar mode, FPS capture (needs a DXVK patch or Metal HUD), HoloCure/Trackmania tests.
+
 ## NOT done / where I stopped
 1. **Steam login not done**: Steam is now running and shows the login form (no more black window). User must sign in with the test account.
    screen (started with `stirredctl steam`-equivalent flags). If it is closed: `swift run stirredctl steam`.

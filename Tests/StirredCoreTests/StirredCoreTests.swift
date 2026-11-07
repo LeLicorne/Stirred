@@ -308,3 +308,24 @@ struct SessionReportTests {
         #expect(FileManager.default.fileExists(atPath: rec.directory.deletingLastPathComponent().appendingPathComponent("latest").path))
     }
 }
+
+@Suite("Launcher helpers")
+struct LauncherHelperTests {
+    @Test func detectsSteamClientProcessOnly() {
+        let ps = """
+        C:\\Program Files (x86)\\Steam\\bin\\cef\\cef.win64\\steamwebhelper.exe --type=gpu
+        C:\\Program Files (x86)\\Common Files\\Steam\\steamservice.exe /RunAsService
+        C:\\Program Files (x86)\\Steam\\steamapps\\common\\Muck\\Muck.exe
+        """
+        #expect(!Launcher.isSteamClientRunning(psOutput: ps))
+        #expect(Launcher.isSteamClientRunning(psOutput: ps + "\nC:\\Program Files (x86)\\Steam\\steam.exe -no-cef-sandbox"))
+    }
+
+    @Test func readsLoggedOnStateFromTheLastStateLine() {
+        let on = "[t] [Connecting, 4, 7] x\n[t] [Logging On, 4, 7] y\n[t] [Logged On, 4, 7] z\n[t] unrelated line"
+        #expect(Launcher.isLoggedOn(connectionLogTail: on))
+        let off = on + "\n[t] [Logged Off, 0, 0] bye"
+        #expect(!Launcher.isLoggedOn(connectionLogTail: off))
+        #expect(!Launcher.isLoggedOn(connectionLogTail: "nothing useful"))
+    }
+}
