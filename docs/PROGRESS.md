@@ -170,6 +170,19 @@ Results of real tests on M4 / macOS 27 / Gcenx Wine 11.21 (both staging and deve
 - Decision: park Trackmania (recipe `experimental`, Play still allowed). Wrapper stays installed (harmless).
 - HoloCure is now `playable` + verified (user reached the main menu and played).
 
+
+## Warframe (2026-11-07, 03:35) — runs to the login screen
+- Installed through Steam: 52 GB, `Warframe.x64.exe` + `Tools/Launcher.exe`. The launcher is a Chromium app that renders a blank white page under
+  Wine and hashes its own exe (so it can't be wrapped). Recipe: `launch_mode: direct`, `graphics: dxvk`, args
+  `-dx11:1 -dx12:0 -threadedworker:1 -cluster:public -language:en -fullscreen:0 -registry:Steam`.
+- Result: game starts, DXVK creates the D3D11 device (FL 11_0 after a normal 11_1 fallback), EE.log reaches the login screen (login music).
+  EE.log says it ignores `-dx11 -dx12 -threadedworker -fullscreen -registry` (those are launcher-level flags), so DX11 is simply its default here.
+  GPU ~80% avg, CPU ~78% of a core, memory 0.8-1.0 GB. User must log in to a Warframe account (never typed by Claude).
+- Plan picked `vkd3d` for Warframe at first because its exes import d3d12.dll: the recipe overrides it to dxvk.
+- Fixed: Stop now kills everything started from the game's folder (`\common\<dir>\`) and Ubisoft's launcher for Ubisoft games. Before,
+  Trackmania stayed "Stopping" in Steam because Ubisoft Connect processes were still alive.
+- Not verified yet: what the user sees (FPS, input lag, rendering), gameplay, longer session stability. 34 tests pass.
+
 ## NOT done / where I stopped
 1. **Steam login not done**: Steam is now running and shows the login form (no more black window). User must sign in with the test account.
    screen (started with `stirredctl steam`-equivalent flags). If it is closed: `swift run stirredctl steam`.

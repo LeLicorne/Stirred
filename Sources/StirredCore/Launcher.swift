@@ -155,8 +155,25 @@ public struct Launcher: Sendable {
         _ = SystemSampler.run("/usr/bin/pkill", ["-9", "-f", paths.engines.path])
     }
 
+    /// Stops the game and everything started from its folder (launchers, helpers). Steam keeps showing "Stopping"
+    /// as long as any process it tracks for the game is alive (e.g. Ubisoft Connect for Trackmania).
     public func stopGame(_ game: Game) {
-        _ = SystemSampler.run("/usr/bin/pkill", ["-f", processNeedle(for: game)])
+        for pattern in Self.stopPatterns(for: game, needle: processNeedle(for: game)) {
+            _ = SystemSampler.run("/usr/bin/pkill", ["-f", pattern])
+        }
+    }
+
+    /// `pkill -f` regular expressions: the exe name, anything under `\common\<folder>\`, and Ubisoft's launcher
+    /// for games that use it.
+    public static func stopPatterns(for game: Game, needle: String) -> [String] {
+        var patterns = [NSRegularExpression.escapedPattern(for: needle)]
+        if let dir = game.installDirectory {
+            patterns.append(NSRegularExpression.escapedPattern(for: "\\common\\\(dir.lastPathComponent)\\"))
+            let usesUbisoft = (try? FileManager.default.contentsOfDirectory(atPath: dir.path))?
+                .contains { $0.lowercased().hasPrefix("upc_r") && $0.lowercased().hasSuffix(".dll") } ?? false
+            if usesUbisoft { patterns.append("Ubisoft Game Launcher") }
+        }
+        return patterns
     }
 
     // MARK: Play

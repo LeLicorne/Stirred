@@ -411,3 +411,18 @@ struct LaunchModeTests {
         #expect(LaunchPlanner.plan(recipe: r, detectedAPIs: [], hardware: hw).launchMode == .direct)
     }
 }
+
+@Suite("Stopping games")
+struct StopGameTests {
+    @Test func stopPatternsCoverFolderAndUbisoftLauncher() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-stop-\(UUID().uuidString)/common/Track(mania)!")
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp.deletingLastPathComponent().deletingLastPathComponent()) }
+        try Data().write(to: tmp.appendingPathComponent("upc_r2_loader64.dll"))
+        let game = Game(store: "steam", storeID: "1", name: "T", installDirectory: tmp)
+        let patterns = Launcher.stopPatterns(for: game, needle: "Track.exe")
+        #expect(patterns.contains("Ubisoft Game Launcher"))
+        #expect(patterns.contains { $0.contains("Track\\(mania\\)!") || $0.contains("Track\\(mania") })
+        #expect(patterns.first == "Track\\.exe")
+    }
+}
