@@ -220,3 +220,19 @@ struct PowerAdviceTests {
         #expect(PowerAdvice.warnings(for: PowerState(lowPowerMode: false, onBattery: false)).isEmpty)
     }
 }
+
+@Suite("Log rotation")
+struct LogRotationTests {
+    @Test func rotatesOnlyOversizedLogs() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-log-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let log = tmp.appendingPathComponent("a.log")
+        try Data(count: 100).write(to: log)
+        #expect(LogRotation.rotateIfNeeded(log, maxBytes: 1000) == false)
+        try Data(count: 5000).write(to: log)
+        #expect(LogRotation.rotateIfNeeded(log, maxBytes: 1000) == true)
+        #expect(!FileManager.default.fileExists(atPath: log.path))
+        #expect(FileManager.default.fileExists(atPath: log.appendingPathExtension("1").path))
+    }
+}

@@ -36,6 +36,8 @@ public struct WineRunner: Sendable {
         var env = ProcessInfo.processInfo.environment
         env["WINEPREFIX"] = prefix.path
         env["WINEDEBUG"] = env["WINEDEBUG"] ?? "-all"
+        // MoltenVK logs ~150 lines at every Vulkan instance creation (one per Wine process): errors only.
+        env["MVK_CONFIG_LOG_LEVEL"] = env["MVK_CONFIG_LOG_LEVEL"] ?? "1"
         for (key, value) in extra { env[key] = value }
         return env
     }
@@ -53,6 +55,7 @@ public struct WineRunner: Sendable {
         process.environment = environment(extra: extraEnvironment)
         if let workingDirectory { process.currentDirectoryURL = workingDirectory }
         if let logFile {
+            LogRotation.rotateIfNeeded(logFile)
             try FileManager.default.createDirectory(
                 at: logFile.deletingLastPathComponent(), withIntermediateDirectories: true)
             FileManager.default.createFile(atPath: logFile.path, contents: nil)
