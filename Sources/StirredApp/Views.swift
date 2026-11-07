@@ -29,6 +29,9 @@ struct ContentView: View {
             case .logs: LogsView()
             }
         }
+        // One flat background under the title: removes the lighter title strip and the notch where its edge met the divider.
+        .toolbarBackground(.hidden, for: .windowToolbar)
+        .navigationSplitViewStyle(.balanced)
     }
 }
 
