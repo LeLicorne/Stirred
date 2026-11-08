@@ -1207,3 +1207,83 @@ struct PresetTests {
         #expect(!DiskSpace(total: 500_000_000_000, free: 100_000_000_000).isLow)
     }
 }
+
+@Suite struct EngineUpdateTests {
+    private func world() throws -> (root: URL, paths: StirredPaths) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-engine-\(UUID().uuidString)")
+        let paths = StirredPaths(root: root)
+        for name in ["stirred-wine-11.9", "stirred-wine-11.21"] {
+            let bin = paths.engines.appendingPathComponent("\(name)/bin")
+            try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+            let wine = bin.appendingPathComponent("wine")
+            try "#!/bin/sh\n".write(to: wine, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wine.path)
+        }
+        let prefix = paths.prefix(named: "steam")
+        try FileManager.default.createDirectory(at: prefix.appendingPathComponent("drive_c/windows/system32"), withIntermediateDirectories: true)
+        try "registry v1".write(to: prefix.appendingPathComponent("system.reg"), atomically: true, encoding: .utf8)
+        try "dll v1".write(to: prefix.appendingPathComponent("drive_c/windows/system32/a.dll"), atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: prefix.appendingPathComponent("drive_c/games"), withIntermediateDirectories: true)
+        return (root, paths)
+    }
+
+    @Test func versionsCompareNumerically() {
+        #expect(EngineVersion.isNewer("11.21", than: "11.9"))
+        #expect(EngineVersion.isNewer("12.0", than: "11.21"))
+        #expect(!EngineVersion.isNewer("11.21", than: "11.21"))
+        #expect(EngineVersion.version(ofEngineNamed: "stirred-wine-11.21") == "11.21")
+    }
+
+    @Test func newestEngineIsChosenNumericallyAndActiveFileWins() throws {
+        let w = try world(); defer { try? FileManager.default.removeItem(at: w.root) }
+        #expect(EngineLocator.preferred(paths: w.paths)?.name == "stirred-wine-11.21")
+        try ActiveEngine.write(w.paths, "active.txt", value: "stirred-wine-11.9")
+        #expect(EngineLocator.preferred(paths: w.paths)?.name == "stirred-wine-11.9")
+        try ActiveEngine.write(w.paths, "active.txt", value: "stirred-wine-gone")   // stale pointer: ignored
+        #expect(EngineLocator.preferred(paths: w.paths)?.name == "stirred-wine-11.21")
+    }
+
+    @Test func statusOffersOnlyNewerTestedReleases() throws {
+        let w = try world(); defer { try? FileManager.default.removeItem(at: w.root) }
+        func release(_ v: String) -> EngineRelease { EngineRelease(name: "stirred-wine-\(v)", version: v, url: URL(string: "https://example.com/\(v)")!, sha256: "00", archiveName: "\(v).tar.xz") }
+        let updater = EngineUpdater(paths: w.paths, catalog: EngineCatalog(releases: [release("11.9"), release("11.21"), release("11.30"), release("12.1")]))
+        #expect(updater.status().updates.map(\.version) == ["12.1", "11.30"])
+    }
+
+    @Test func snapshotRestoresRegistryAndSystemFilesButNeverGames() throws {
+        let w = try world(); defer { try? FileManager.default.removeItem(at: w.root) }
+        let prefix = w.paths.prefix(named: "steam")
+        try PrefixSnapshot.take(w.paths, engine: "stirred-wine-11.21")
+        try "registry v2".write(to: prefix.appendingPathComponent("system.reg"), atomically: true, encoding: .utf8)
+        try FileManager.default.removeItem(at: prefix.appendingPathComponent("drive_c/windows/system32/a.dll"))
+        try "new game file".write(to: prefix.appendingPathComponent("drive_c/games/save.dat"), atomically: true, encoding: .utf8)
+        try PrefixSnapshot.restore(w.paths, engine: "stirred-wine-11.21")
+        #expect(try String(contentsOf: prefix.appendingPathComponent("system.reg"), encoding: .utf8) == "registry v1")
+        #expect(FileManager.default.fileExists(atPath: prefix.appendingPathComponent("drive_c/windows/system32/a.dll").path))
+        #expect(FileManager.default.fileExists(atPath: prefix.appendingPathComponent("drive_c/games/save.dat").path))
+        #expect(throws: EngineUpdateError.self) { try PrefixSnapshot.restore(w.paths, engine: "stirred-wine-nothing") }
+    }
+
+    @Test func cannotRemoveTheActiveEngineButCanRemoveOthers() throws {
+        let w = try world(); defer { try? FileManager.default.removeItem(at: w.root) }
+        let updater = EngineUpdater(paths: w.paths, catalog: EngineCatalog(releases: []))
+        #expect(throws: EngineUpdateError.self) { try updater.remove("stirred-wine-11.21") }
+        try updater.remove("stirred-wine-11.9")
+        #expect(EngineLocator.installedEngines(paths: w.paths).map(\.name) == ["stirred-wine-11.21"])
+    }
+
+    @Test func installRefusesReleasesOutsideTheCatalog() async throws {
+        let w = try world(); defer { try? FileManager.default.removeItem(at: w.root) }
+        let updater = EngineUpdater(paths: w.paths, catalog: EngineCatalog(releases: []))
+        await #expect(throws: EngineUpdateError.self) { try await updater.install("stirred-wine-99.0", progress: { _ in }) }
+    }
+
+    @Test func readsUpstreamVersionAndBundledCatalog() throws {
+        #expect(EngineUpdater.upstreamVersion(fromReleaseJSON: Data(#"{"tag_name": "11.22", "name": "x"}"#.utf8)) == "11.22")
+        #expect(EngineUpdater.upstreamVersion(fromReleaseJSON: Data("nope".utf8)) == nil)
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Resources/engines.json")
+        let catalog = try #require(EngineCatalog.load(from: url))
+        let standard = SetupSources.standard
+        #expect(catalog.releases.contains { $0.name == standard.engineName && $0.sha256 == standard.wineSHA256 && $0.url == standard.wineURL })
+    }
+}

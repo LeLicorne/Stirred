@@ -263,6 +263,42 @@ func run() async throws {
             if percent != last.value { last.value = percent; print("\(percent)%") }
         })
         print("done")
+    case "engine":
+        let sub = args.count > 1 ? args[1] : "status"
+        let updater = launcher.engineUpdater
+        switch sub {
+        case "status":
+            let st = updater.status()
+            print("active: \(st.active?.name ?? "none")   previous (for rollback): \(st.previous ?? "none")")
+            for e in st.installed { print("installed: \(e.name)") }
+            if st.updates.isEmpty { print("no newer tested engine") }
+            for r in st.updates { print("update available: \(r.name)  (stirredctl engine update)") }
+        case "install":
+            guard args.count > 2 else { fail("usage: stirredctl engine install <name>") }
+            try await updater.install(args[2], progress: { print($0) })
+            print("installed (not in use yet: stirredctl engine use \(args[2]))")
+        case "use":
+            guard args.count > 2 else { fail("usage: stirredctl engine use <name>") }
+            try await launcher.useEngine(args[2], onPhase: { print($0) })
+            print("now using \(args[2]); `stirredctl engine rollback` goes back")
+        case "update":
+            guard let release = updater.status().updates.first else { fail("no newer tested engine") }
+            try await updater.install(release.name, progress: { print($0) })
+            try await launcher.useEngine(release.name, onPhase: { print($0) })
+            print("now using \(release.name); `stirredctl engine rollback` goes back")
+        case "rollback":
+            try await launcher.rollbackEngine(onPhase: { print($0) })
+            print("rolled back")
+        case "remove":
+            guard args.count > 2 else { fail("usage: stirredctl engine remove <name>") }
+            try updater.remove(args[2]); print("removed \(args[2])")
+        case "upstream":
+            if let v = await EngineUpdater.checkUpstream() {
+                let active = updater.status().active.map { EngineVersion.version(ofEngineNamed: $0.name) } ?? "0"
+                print("latest Gcenx Wine build: \(v) (in use: \(active)). Stirred only installs builds it has tested and pinned.")
+            } else { print("could not reach GitHub") }
+        default: fail("usage: stirredctl engine status|install|use|update|rollback|remove|upstream")
+        }
     case "report":
         let dir = args.count > 1 ? URL(fileURLWithPath: args[1])
             : SessionRecorder.sessionsDirectory(launcher.paths).appendingPathComponent("latest").resolvingSymlinksInPath()

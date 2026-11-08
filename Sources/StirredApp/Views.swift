@@ -3,10 +3,10 @@ import Charts
 import StirredCore
 
 enum Section: String, CaseIterable, Identifiable {
-    case library = "Library", all = "All my games", check = "Check a game", disk = "Disk", activity = "Activity", logs = "Logs"
+    case library = "Library", all = "All my games", check = "Check a game", disk = "Disk", engine = "Engine", activity = "Activity", logs = "Logs"
     var id: String { rawValue }
     var icon: String {
-        switch self { case .library: "gamecontroller"; case .all: "square.grid.2x2"; case .check: "magnifyingglass"; case .disk: "internaldrive"; case .activity: "waveform.path.ecg"; case .logs: "doc.text.magnifyingglass" }
+        switch self { case .library: "gamecontroller"; case .all: "square.grid.2x2"; case .check: "magnifyingglass"; case .disk: "internaldrive"; case .engine: "gearshape.2"; case .activity: "waveform.path.ecg"; case .logs: "doc.text.magnifyingglass" }
     }
 }
 
@@ -36,6 +36,7 @@ struct ContentView: View {
             case .all: AllGamesView()
             case .check: CheckView()
             case .disk: DiskView()
+            case .engine: EngineView()
             case .activity: ActivityView()
             case .logs: LogsView()
             }
@@ -154,6 +155,9 @@ struct LibraryView: View {
                     Banner(text: "No Wine engine found. Run Scripts/assemble-engine.sh, then relaunch.", color: .red)
                 }
                 ForEach(model.warnings, id: \.self) { Banner(text: $0, color: .yellow) }
+                if let update = model.engineStatus?.updates.first {
+                    Banner(text: "A tested engine update is available (Wine \(update.version)). Install it from the Engine section.", color: .blue)
+                }
                 if let space = model.diskSpace, space.isLow {
                     Banner(text: "Only \(ByteCountFormatter.string(fromByteCount: space.free, countStyle: .file)) left on this Mac: installs may fail. Free space in the Disk section.", color: .orange)
                 }
@@ -930,5 +934,69 @@ struct DiskView: View {
 
     private func row(_ title: String, _ value: String) -> some View {
         HStack { Text(title); Spacer(); Text(value).foregroundStyle(.secondary) }
+    }
+}
+
+
+// MARK: - Engine
+
+struct EngineView: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                let status = model.engineStatus
+                GroupBox("In use") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(status?.active?.name ?? "No engine").font(.title3.bold())
+                        if let previous = status?.previous {
+                            HStack {
+                                Text("Previous engine kept: \(previous)").foregroundStyle(.secondary)
+                                Spacer()
+                                Button("Go back to it") { model.rollbackEngine() }.disabled(model.engineBusy != nil)
+                            }
+                        }
+                    }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
+                }
+                GroupBox("Updates") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if status?.updates.isEmpty ?? true { Text("No newer engine tested by Stirred.").foregroundStyle(.secondary) }
+                        ForEach(status?.updates ?? []) { release in
+                            HStack(alignment: .top) {
+                                VStack(alignment: .leading) {
+                                    Text("Wine \(release.version)").bold()
+                                    Text(release.notes ?? "Tested by Stirred.").font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button("Install and switch") { model.updateEngine(release) }.disabled(model.engineBusy != nil)
+                            }
+                        }
+                        if let busy = model.engineBusy { HStack { ProgressView().controlSize(.small); Text(busy) } }
+                        Text("Before switching, Stirred saves the Windows environment, closes Steam, checks the new engine and goes back by itself if it fails. Your games and saves are not touched.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        HStack {
+                            Button("Check for newer Wine builds online") { model.checkUpstream() }
+                            if let note = model.upstreamNote { Text(note).font(.caption).foregroundStyle(.secondary) }
+                        }
+                    }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
+                }
+                GroupBox("Installed engines") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(status?.installed ?? [], id: \.name) { engine in
+                            HStack {
+                                Text(engine.name)
+                                Spacer()
+                                if engine.name == status?.active?.name { Text("in use").foregroundStyle(.secondary) }
+                                else { Button("Remove", role: .destructive) { model.removeEngine(engine.name) }.disabled(model.engineBusy != nil) }
+                            }
+                        }
+                    }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(24)
+        }
+        .navigationTitle("Engine")
+        .task { model.loadEngineStatus() }
     }
 }

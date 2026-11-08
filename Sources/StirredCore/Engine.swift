@@ -33,7 +33,7 @@ public enum EngineLocator {
             .filter { $0.lastPathComponent.hasPrefix("stirred-") }
             .map(Engine.init(directory:))
             .filter { $0.wineBinary != nil }
-            .sorted { $0.name > $1.name }
+            .sorted { EngineVersion.isNewer(EngineVersion.version(ofEngineNamed: $0.name), than: EngineVersion.version(ofEngineNamed: $1.name)) }
     }
 
     public static func preferred(paths: StirredPaths = StirredPaths()) -> Engine? {
@@ -42,6 +42,9 @@ public enum EngineLocator {
             let engine = Engine(directory: paths.engines.appendingPathComponent(name, isDirectory: true))
             return engine.wineBinary == nil ? nil : engine
         }
-        return installedEngines(paths: paths).first
+        let installed = installedEngines(paths: paths)
+        // The engine chosen by an update (or a rollback) wins over "newest installed".
+        if let chosen = ActiveEngine.read(paths, "active.txt"), let engine = installed.first(where: { $0.name == chosen }) { return engine }
+        return installed.first
     }
 }

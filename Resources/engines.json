@@ -1,0 +1,12 @@
+{
+  "releases": [
+    {
+      "name": "stirred-wine-11.21",
+      "version": "11.21",
+      "url": "https://github.com/Gcenx/macOS_Wine_builds/releases/download/11.21/wine-staging-11.21-osx64.tar.xz",
+      "sha256": "d7bcd5abf4df27aae397a7898aef074fea4a2e0b51e0a55aa9659517bbf9d452",
+      "archive_name": "wine-staging-11.21-osx64.tar.xz",
+      "notes": "Wine staging 11.21 (Gcenx build, WoW64). The engine Stirred is tested with."
+    }
+  ]
+}

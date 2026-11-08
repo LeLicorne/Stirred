@@ -128,8 +128,16 @@ public struct SetupManager: Sendable {
     // MARK: Steps
 
     private func installEngine(_ progress: @escaping @Sendable (String) -> Void) async throws {
+        try await installEngine(EngineRelease(name: sources.engineName, version: "11.21", url: sources.wineURL, sha256: sources.wineSHA256,
+                                              archiveName: "wine-staging-11.21-osx64.tar.xz"), progress)
+    }
+
+    /// Downloads (checksum-verified), unpacks and puts an engine in `engines/<name>`. Does not make it the active one.
+    func installEngine(_ release: EngineRelease, _ progress: @escaping @Sendable (String) -> Void) async throws {
+        try FileManager.default.createDirectory(at: paths.downloads, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: paths.engines, withIntermediateDirectories: true)
         let archive = try await downloadVerified(
-            sources.wineURL, name: "wine-staging-11.21-osx64.tar.xz", sha256: sources.wineSHA256, label: "Wine", progress)
+            release.url, name: release.archiveName, sha256: release.sha256, label: "Wine", progress)
         progress("Unpacking Wine (about a minute)…")
         let fm = FileManager.default
         let tmp = paths.engines.appendingPathComponent("_installing", isDirectory: true)
@@ -137,7 +145,7 @@ public struct SetupManager: Sendable {
         try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
         try Self.runChecked("/usr/bin/tar", ["-xf", archive.path, "-C", tmp.path], what: "Unpacking Wine")
         _ = SystemSampler.run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", tmp.path])
-        let target = paths.engines.appendingPathComponent(sources.engineName, isDirectory: true)
+        let target = paths.engines.appendingPathComponent(release.name, isDirectory: true)
         try? fm.removeItem(at: target)
         try fm.moveItem(at: tmp, to: target)
         guard Engine(directory: target).wineBinary != nil else {

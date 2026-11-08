@@ -14,7 +14,7 @@ Ideas ordered from most to least valuable (product/UX view). Status: **Done**, *
 | 8 | Community recipes + anonymous "report result" | Done (offline part) | Export / import of recipe files with strict validation, imported recipes win over bundled ones. Not done: automatic fetching from a hosted repository, anonymous result reports (need a public repo and a privacy design first) |
 | 9 | Other stores (GOG first, then Epic via Legendary) | Queued | Plug into `GameStoreProvider`; one store at a time, each is fragile |
 | 10 | Disk management: size per game, move to an external disk, low-space alert | Done | Disk section (free space, what Stirred uses, safe cleanup), low-space banner, move a game to another disk and back (`stirredctl disk`, `stirredctl move`) |
-| 11 | Auto-update of engine and components with rollback | Queued | Keeps Stirred alive as Wine/DXVK move; pin versions by SHA-256 as setup does |
+| 11 | Auto-update of engine and components with rollback | Done (engine) | Tested engines are listed in `Resources/engines.json` (SHA-256 pinned). One-click install and switch with prefix snapshot, start-up check and automatic rollback; manual rollback; online check for newer upstream builds (information only). Not done: DXVK/MoltenVK updates, silent automatic switching |
 | 12 | Controller navigation, full screen, menu-bar mode | Queued | |
 
 ## Distribution

@@ -72,3 +72,9 @@ Rosetta 2 is to be reduced after macOS 27 (check Apple's current notes). Stirred
 - A moved game cannot be uninstalled from Stirred until it is moved back.
 - Only Steam games, and only while nothing is downloading. Steam is closed during the move.
 - "Can be cleaned" only deletes setup downloads and Steam's shader cache, never saves, games or prefixes. The low-space warning appears under 20 GB free.
+
+## Engine updates
+- Only engines listed in `Resources/engines.json` can be installed (pinned by SHA-256), so a new Wine reaches users with a Stirred release. "Check for newer Wine builds" only reports; it never installs.
+- Switching saves the prefix's registry and Windows system files with APFS cloning (not games, not Steam), closes Steam, runs `cmd /c echo` with the new engine and goes back by itself if that fails. The check is small: a game that breaks on the new Wine is not caught; use "Go back" then.
+- Checked 2026-11-08 with a second copy of Wine 11.21 posing as 11.22: install, switch, rollback, then Muck started without crash. A really different Wine version has not been tried; no newer build exists yet.
+- DXVK and MoltenVK are not updated this way (DXVK 2.x does not work on this stack anyway).

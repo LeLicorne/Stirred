@@ -104,6 +104,7 @@ final class AppModel {
         setupComplete = snapshot.4.allSatisfy(\.done)
         warnings = PowerAdvice.warnings(for: .current)
         diskSpace = DiskSpace.of(launcher.paths.root)
+        loadEngineStatus()
         if let watch = installWatch {
             if games.contains(where: { $0.downloadProgress != nil }) {
                 installWatch?.sawDownload = true
@@ -155,6 +156,63 @@ final class AppModel {
             message = "\(result.replaced ? "Replaced" : "Imported") the recipe for \(result.recipe.name). It applies at the next launch."
             presetRevision += 1
         } catch { message = "\(error)" }
+    }
+
+    // MARK: Engine
+
+    var engineStatus: EngineStatus?
+    var engineBusy: String?
+    var upstreamNote: String?
+
+    func loadEngineStatus() { engineStatus = launcher.engineUpdater.status() }
+
+    private func runEngine(_ work: @escaping @Sendable (Launcher, @escaping @Sendable (String) -> Void) async throws -> String) {
+        guard engineBusy == nil, phases.values.allSatisfy({ $0 != "Playing" && $0 != "Updating" }) else {
+            message = "Close your games first."; return
+        }
+        message = nil; engineBusy = "Starting…"
+        let launcher = self.launcher
+        Task.detached { [weak self] in
+            do {
+                let done = try await work(launcher) { phase in Task { @MainActor in self?.engineBusy = phase } }
+                await MainActor.run { self?.message = done }
+            } catch { await MainActor.run { self?.message = "\(error)" } }
+            await MainActor.run { self?.engineBusy = nil; self?.loadEngineStatus() }
+            await self?.refresh()
+        }
+    }
+
+    func updateEngine(_ release: EngineRelease) {
+        runEngine { launcher, phase in
+            try await launcher.engineUpdater.install(release.name, progress: phase)
+            try await launcher.useEngine(release.name, onPhase: phase)
+            return "Now using Wine \(release.version). You can go back from the Engine section."
+        }
+    }
+
+    func rollbackEngine() {
+        runEngine { launcher, phase in
+            try await launcher.rollbackEngine(onPhase: phase)
+            return "Went back to the previous engine."
+        }
+    }
+
+    func removeEngine(_ name: String) {
+        do { try launcher.engineUpdater.remove(name); loadEngineStatus() } catch { message = "\(error)" }
+    }
+
+    func checkUpstream() {
+        upstreamNote = "Checking…"
+        let active = engineStatus?.active.map { EngineVersion.version(ofEngineNamed: $0.name) } ?? "0"
+        Task { [weak self] in
+            let latest = await EngineUpdater.checkUpstream()
+            await MainActor.run {
+                guard let latest else { self?.upstreamNote = "Could not reach GitHub."; return }
+                self?.upstreamNote = EngineVersion.isNewer(latest, than: active)
+                    ? "Wine \(latest) exists upstream. Stirred has not tested it, so it is not offered yet."
+                    : "You have the latest Wine build (\(latest))."
+            }
+        }
     }
 
     // MARK: Disk
