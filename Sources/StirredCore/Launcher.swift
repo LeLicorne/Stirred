@@ -379,6 +379,7 @@ public struct Launcher: Sendable {
     /// this game, close Steam too, unless the user keeps it or another game is still running.
     public func cleanUpAfterGame(_ game: Game, startedSteam: Bool, keepSteam: Bool, otherGamesRunning: Bool) async {
         stopGame(game)
+        backupGameData(.session)   // settings, controls and saves the game just wrote
         guard startedSteam, !keepSteam, !otherGamesRunning else { return }
         await quitSteam(graceful: true)
     }

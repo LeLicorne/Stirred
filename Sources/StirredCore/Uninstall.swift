@@ -95,6 +95,7 @@ extension Launcher {
             onPhase("Closing Steam…")
             await quitSteam(graceful: true)
         }
+        backupGameData(.uninstall)
         onPhase("Deleting files…")
         try Uninstaller.execute(plan)
         return plan.bytes

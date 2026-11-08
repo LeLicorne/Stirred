@@ -98,3 +98,10 @@ Rosetta 2 is to be reduced after macOS 27 (check Apple's current notes). Stirred
 ## DXMT now works as an optional engine (2026-11-08)
 - RV There Yet? draws its 3D scene with DXMT on a patched Wine (`-dxmt` engine); a solo run of ~6 min ended cleanly. Multiplayer does not work yet
   (Epic Online Services: "No online services are present", session creation times out). Orcs Must Die 3 not retested with DXMT.
+
+## Automatic backup of game settings and saves (2026-11-08)
+- Cause: deleting a throw-away copy of the Windows environment lost the controls set in a game (a human mistake, not an engine matter: settings live in the prefix, not in the engine).
+- Stirred now copies, with APFS cloning (instant), each user's `AppData/Local|Roaming` (except Steam, Temp and caches), `Documents`, `Saved Games` and Steam's `userdata` into `backups/<date>-<reason>/`.
+  It runs after each game (5 kept, skipped if nothing changed) and before engine switch/rollback, uninstall and move (10 kept each).
+- `stirredctl backup [list|now|restore <name>]`, and Disk > "Game settings and saves" in the app. Restore needs Steam closed and takes a safety copy first.
+- Not covered: the games' own files, files outside those folders (a game that writes next to its executable), and a lost disk (copies are on the same disk).

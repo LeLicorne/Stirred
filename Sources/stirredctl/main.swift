@@ -47,7 +47,7 @@ func printPlan(_ plan: LaunchPlan) {
 
 func run() async throws {
     guard let command = args.first else {
-        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|owned [--refine N]|preset <game> [name]|diagnose <game> [--fix]|check <game>|uninstall <game> [--yes]|library|plan <game>|run <game> [--watch] [--keep-steam] [--latency P] [--hud] [--async]|report [dir]>")
+        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|owned [--refine N]|preset <game> [name]|diagnose <game> [--fix]|check <game>|uninstall <game> [--yes]|library|plan <game>|run <game> [--watch] [--keep-steam] [--latency P] [--hud] [--async]|backup [list|now|restore <name>]|report [dir]>")
         print("<game> is an appid or part of the name, e.g. `stirredctl run muck --watch`")
         return
     }
@@ -231,6 +231,22 @@ func run() async throws {
             try launcher.recipes.removeImported(id)
             print("Removed the imported recipe for \(id) (the bundled one, if any, applies again).")
         default: fail("usage: stirredctl recipe export|import|list|remove")
+        }
+    case "backup":
+        let sub = args.count > 1 ? args[1] : "list"
+        switch sub {
+        case "list":
+            let all = launcher.backups.list()
+            if all.isEmpty { print("No backups yet.") }
+            for b in all { print("\(b.name)\t\(b.reason.rawValue)\t\(b.items.count) items") }
+        case "now":
+            if let b = try launcher.backups.take(reason: .manual) { print("saved: \(b.name)") } else { print("nothing to save") }
+        case "restore":
+            guard args.count > 2 else { print("usage: stirredctl backup restore <name>"); exit(2) }
+            try launcher.restoreBackup(args[2])
+            print("restored \(args[2])")
+        default:
+            print("usage: stirredctl backup [list|now|restore <name>]"); exit(2)
         }
     case "disk":
         let gb = { (b: Int64) in ByteCountFormatter.string(fromByteCount: b, countStyle: .file) }

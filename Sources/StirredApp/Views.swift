@@ -865,6 +865,9 @@ struct LogsView: View {
 struct DiskView: View {
     @Environment(AppModel.self) private var model
     @State private var toClean: Reclaimable?
+    @State private var backups: [BackupInfo] = []
+    @State private var toRestore: BackupInfo?
+    @State private var backupMessage: String?
 
     private func size(_ bytes: Int64) -> String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
 
@@ -901,6 +904,30 @@ struct DiskView: View {
                             }
                         }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    GroupBox("Game settings and saves") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Stirred copies your games' settings, controls and save files after each game and before risky changes (engine switch, uninstall, move). Copies are instant and take almost no space.")
+                                .font(.caption).foregroundStyle(.secondary)
+                            ForEach(backups.prefix(8)) { backup in
+                                HStack {
+                                    Text(backup.date.formatted(date: .abbreviated, time: .shortened))
+                                    Text(backup.reason.rawValue).font(.caption).foregroundStyle(.secondary)
+                                    Spacer()
+                                    Button("Restore…") { toRestore = backup }.disabled(model.steam != .stopped)
+                                }
+                            }
+                            if backups.isEmpty { Text("No copy yet.").foregroundStyle(.secondary) }
+                            HStack {
+                                Button("Back up now") {
+                                    let launcher = model.launcher
+                                    backupMessage = launcher.backupGameData(.manual) == nil ? "Nothing new to save." : "Saved."
+                                    backups = launcher.backups.list()
+                                }
+                                if let backupMessage { Text(backupMessage).font(.caption).foregroundStyle(.secondary) }
+                                if model.steam != .stopped { Text("Close Steam to restore.").font(.caption).foregroundStyle(.secondary) }
+                            }
+                        }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
+                    }
                     GroupBox("Games") {
                         VStack(alignment: .leading, spacing: 8) {
                             ForEach(model.games) { game in
@@ -930,7 +957,15 @@ struct DiskView: View {
             .padding(24)
         }
         .navigationTitle("Disk")
-        .task { model.loadDiskReport() }
+        .task { model.loadDiskReport(); backups = model.launcher.backups.list() }
+        .confirmationDialog("Restore this copy?", isPresented: Binding(get: { toRestore != nil }, set: { if !$0 { toRestore = nil } }),
+                            titleVisibility: .visible, presenting: toRestore) { backup in
+            Button("Restore") {
+                do { try model.launcher.restoreBackup(backup.name); backupMessage = "Restored." } catch { backupMessage = "\(error)" }
+                backups = model.launcher.backups.list()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in Text("Settings and saves go back to how they were then. A copy of the current state is kept first.") }
         .toolbar { ToolbarItem { Button { model.loadDiskReport() } label: { Label("Refresh", systemImage: "arrow.clockwise") }.disabled(model.diskBusy) } }
         .confirmationDialog("Clean \(toClean?.title ?? "")?", isPresented: Binding(get: { toClean != nil }, set: { if !$0 { toClean = nil } }),
                             titleVisibility: .visible, presenting: toClean) { item in

@@ -291,6 +291,7 @@ extension Launcher {
             onPhase("Closing Steam…")
             await quitSteam(graceful: true)
         }
+        backupGameData(.move)
         onPhase("Moving…")
         try await Task.detached { try GameMover.execute(plan, progress: progress) }.value
     }

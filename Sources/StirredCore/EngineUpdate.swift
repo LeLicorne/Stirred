@@ -262,11 +262,13 @@ extension Launcher {
     /// Closes Steam and games' Wine, then runs the switch.
     public func useEngine(_ name: String, onPhase: @Sendable (String) -> Void = { _ in }) async throws {
         if steamState() != .stopped { onPhase("Closing Steam…"); await quitSteam(graceful: true) }
+        backupGameData(.engineChange)
         try await engineUpdater.use(name, onPhase: onPhase)
     }
 
     public func rollbackEngine(onPhase: @Sendable (String) -> Void = { _ in }) async throws {
         if steamState() != .stopped { onPhase("Closing Steam…"); await quitSteam(graceful: true) }
+        backupGameData(.engineChange)
         try await engineUpdater.rollback(onPhase: onPhase)
     }
 }

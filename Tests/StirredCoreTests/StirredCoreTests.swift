@@ -1403,3 +1403,52 @@ struct PresetTests {
         #expect(plan.requiredComponents.contains("dxvk"))
     }
 }
+
+@Suite struct GameDataBackupTests {
+    private func world() throws -> (paths: StirredPaths, backup: GameDataBackup, home: URL) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-backup-\(UUID().uuidString)")
+        let paths = StirredPaths(root: root)
+        let home = paths.prefix(named: "steam").appendingPathComponent("drive_c/users/me")
+        for dir in ["AppData/Local/Ride/Saved", "AppData/Local/Steam/htmlcache", "AppData/Local/Temp", "Documents/Trackmania"] {
+            try FileManager.default.createDirectory(at: home.appendingPathComponent(dir), withIntermediateDirectories: true)
+        }
+        try "controls v1".write(to: home.appendingPathComponent("AppData/Local/Ride/Saved/input.ini"), atomically: true, encoding: .utf8)
+        try "cache".write(to: home.appendingPathComponent("AppData/Local/Steam/htmlcache/x"), atomically: true, encoding: .utf8)
+        try "profile".write(to: home.appendingPathComponent("Documents/Trackmania/profile"), atomically: true, encoding: .utf8)
+        return (paths, GameDataBackup(paths: paths), home)
+    }
+
+    @Test func savesUserDataAndSkipsCaches() throws {
+        let w = try world()
+        let info = try #require(try w.backup.take(reason: .manual))
+        #expect(info.items.contains("drive_c/users/me/AppData/Local/Ride"))
+        #expect(info.items.contains("drive_c/users/me/Documents"))
+        #expect(!info.items.contains { $0.localizedCaseInsensitiveContains("Steam") || $0.hasSuffix("Temp") })
+        let saved = w.backup.directory.appendingPathComponent("\(info.name)/files/drive_c/users/me/AppData/Local/Ride/Saved/input.ini")
+        #expect(try String(contentsOf: saved, encoding: .utf8) == "controls v1")
+    }
+
+    @Test func sessionBackupsSkipWhenNothingChangedAndAreLimited() throws {
+        let w = try world()
+        #expect(try w.backup.take(reason: .session, now: Date(timeIntervalSince1970: 1_000_000)) != nil)
+        #expect(try w.backup.take(reason: .session, now: Date(timeIntervalSince1970: 1_000_100)) == nil)   // unchanged
+        for i in 0..<7 {
+            try "v\(i)".write(to: w.home.appendingPathComponent("AppData/Local/Ride/Saved/input.ini"), atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(Double(i + 1) * 10)],
+                                                  ofItemAtPath: w.home.appendingPathComponent("AppData/Local/Ride/Saved/input.ini").path)
+            _ = try w.backup.take(reason: .session, now: Date(timeIntervalSince1970: 2_000_000 + Double(i) * 100))
+        }
+        #expect(w.backup.list().filter { $0.reason == .session }.count == 5)
+    }
+
+    @Test func restoreBringsBackLostSettingsAndKeepsASafetyCopy() throws {
+        let w = try world()
+        let info = try #require(try w.backup.take(reason: .manual))
+        try FileManager.default.removeItem(at: w.home.appendingPathComponent("AppData/Local/Ride"))   // e.g. a prefix reset
+        try w.backup.restore(info.name)
+        let file = w.home.appendingPathComponent("AppData/Local/Ride/Saved/input.ini")
+        #expect(try String(contentsOf: file, encoding: .utf8) == "controls v1")
+        #expect(w.backup.list().contains { $0.reason == .beforeRestore })
+        #expect(throws: BackupError.self) { try w.backup.restore("nope") }
+    }
+}
