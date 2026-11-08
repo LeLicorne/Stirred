@@ -1,14 +1,11 @@
 {
  "appid": 1522820,
  "name": "Orcs Must Die! 3",
- "status": "unsupported",
- "verified": true,
- "graphics": "dxvk",
+ "status": "experimental",
+ "verified": false,
+ "graphics": "dxmt",
  "launch_args": [
   "-dx11"
  ],
- "blockers": [
-  "black-3d-scene"
- ],
- "notes": "Unreal Engine 4, 64-bit, no anti-cheat. The 2D interface renders but the whole 3D scene (menu background and game) stays black. Tried without success: MoltenVK 1.4.2, Unreal SM4 (-sm4), disabling auto-exposure/tiled lighting/volumetric fog/translucency volume, Wine's own D3D11 (refuses: needs Feature Level 11.0), DXVK options (constant buffer range check, zero workgroup memory, raw SSBO, cached dynamic resources). Parked."
+ "notes": "Unreal Engine 4, 64-bit, no anti-cheat. With DXVK + MoltenVK the 3D scene stays black (MoltenVK limits, many options tried). Now set to the optional DXMT engine (Direct3D 11 to Metal, docs/DXMT.md), which fixed the same symptom in RV There Yet?: NOT tested yet with this game. Without the engine Stirred falls back to DXVK (black 3D scene)."
 }

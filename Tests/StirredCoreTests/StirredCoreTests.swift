@@ -1367,3 +1367,39 @@ struct PresetTests {
         #expect(try !w.launcher.engine().isDXMT)
     }
 }
+
+@Suite struct UnrealAutoDXMTTests {
+    private func world(withDXMT: Bool) throws -> (launcher: Launcher, game: Game) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-unreal-\(UUID().uuidString)")
+        let paths = StirredPaths(root: root)
+        if withDXMT {
+            let bin = paths.engines.appendingPathComponent("stirred-wine-11.21-dxmt/bin")
+            try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+            let wine = bin.appendingPathComponent("wine")
+            try "#!/bin/sh\n".write(to: wine, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wine.path)
+        }
+        let game = root.appendingPathComponent("Proj")
+        let bin = game.appendingPathComponent("Proj/Binaries/Win64")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        try Data().write(to: bin.appendingPathComponent("Proj-Win64-Shipping.exe"))
+        return (Launcher(paths: paths, recipesDirectory: root, resourcesDirectory: root),
+                Game(store: "steam", storeID: "777", name: "Proj", installDirectory: game))
+    }
+
+    @Test func unrealGameWithoutRecipeStartsWithDXMTAndDX11() throws {
+        let w = try world(withDXMT: true)
+        let plan = w.launcher.plan(for: w.game)
+        #expect(plan.backend == .dxmt)
+        #expect(plan.gameArguments.first == "-dx11")
+        #expect(!plan.requiredComponents.contains("dxvk"))
+    }
+
+    @Test func withoutTheEngineUnrealFallsBackToDXVKWithDX11() throws {
+        let w = try world(withDXMT: false)
+        let plan = w.launcher.plan(for: w.game)
+        #expect(plan.backend == .dxvk)
+        #expect(plan.gameArguments.contains("-dx11"))
+        #expect(plan.requiredComponents.contains("dxvk"))
+    }
+}

@@ -112,6 +112,23 @@ public struct Launcher: Sendable {
         let personalLatency = game.steamAppID.flatMap { overrides.read($0).latency }
         var plan = LaunchPlanner.plan(recipe: recipe, detectedAPIs: apis, latency: options.latency ?? personalLatency ?? preset?.latency)
         if let mode = options.launchMode { plan.launchMode = mode }
+        // Unreal Engine games draw nothing in 3D through DXVK + MoltenVK (no geometry shaders) and default to DirectX 12, which
+        // fails under Wine. Without a recipe choice: DirectX 11 (-dx11), and DXMT when the optional engine is installed.
+        if recipe?.graphics == nil, Self.isUnreal(game.installDirectory) {
+            if !plan.gameArguments.contains(where: { ["-dx11", "-dx12", "-d3d11", "-d3d12"].contains($0.lowercased()) }) {
+                plan.gameArguments.insert("-dx11", at: 0)
+            }
+            if EngineLocator.dxmt(paths: paths) != nil {
+                plan.backend = .dxmt
+                plan.requiredComponents.removeAll { $0 == "dxvk" || $0 == "vkd3d-proton" }
+                plan.warnings.append("Unreal Engine game: started with DXMT (Direct3D 11 to Metal) so the 3D scene is drawn.")
+            } else {
+                plan.backend = .dxvk
+                plan.requiredComponents.removeAll { $0 == "vkd3d-proton" }
+                if !plan.requiredComponents.contains("dxvk") { plan.requiredComponents.append("dxvk") }
+                plan.warnings.append("Unreal Engine game: the 3D scene may stay black without the optional DXMT engine (docs/DXMT.md).")
+            }
+        }
         // Recipes are shared: without the optional DXMT engine, fall back to DXVK instead of failing.
         if plan.backend == .dxmt, EngineLocator.dxmt(paths: paths) == nil {
             plan.backend = .dxvk
@@ -128,6 +145,12 @@ public struct Launcher: Sendable {
             plan.gameArguments.insert("-force-d3d11", at: 0)
         }
         return plan
+    }
+
+    /// Unreal games ship `<Project>/Binaries/Win64/<Project>-Win64-Shipping.exe` next to an `Engine` folder.
+    static func isUnreal(_ directory: URL?) -> Bool {
+        guard let directory else { return false }
+        return GameExecutableFinder.candidates(in: directory).contains { $0.lastPathComponent.hasSuffix("-Win64-Shipping.exe") }
     }
 
     // MARK: Graphics

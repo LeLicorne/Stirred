@@ -24,6 +24,8 @@ What was needed (2026-11-08):
   and says so in the warnings, so shared recipes never break.
 - Steam and its games share one Wine, so when a DXMT game starts and Steam runs under the other engine, Stirred closes Steam
   and restarts it with the right one (`engines/steam-engine.txt` remembers which, and is removed when Steam stops).
+- Automatic: an Unreal Engine game (a `*-Win64-Shipping.exe` under `Binaries/Win64`) whose recipe sets no graphics layer starts with `-dx11` and
+  DXMT when the engine is installed (DXVK + `-dx11` otherwise). A recipe or personal setting always wins.
 - On first use Stirred copies `winemetal.dll` into the prefix's system folders and removes DXVK's DLLs, `dxvk.conf` and registry override
   for that game; switching back to DXVK reinstalls them.
 - Install: `Scripts/build-dxmt-engine.sh` (about 15 minutes of compiling, needs Homebrew bison pkgconf autoconf mingw-w64 and gh).
