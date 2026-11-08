@@ -47,7 +47,7 @@ func printPlan(_ plan: LaunchPlan) {
 
 func run() async throws {
     guard let command = args.first else {
-        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|owned [--refine N]|check <game>|uninstall <game> [--yes]|library|plan <game>|run <game> [--watch] [--keep-steam] [--latency P] [--hud] [--async]|report [dir]>")
+        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|owned [--refine N]|diagnose <game> [--fix]|check <game>|uninstall <game> [--yes]|library|plan <game>|run <game> [--watch] [--keep-steam] [--latency P] [--hud] [--async]|report [dir]>")
         print("<game> is an appid or part of the name, e.g. `stirredctl run muck --watch`")
         return
     }
@@ -114,6 +114,22 @@ func run() async throws {
         for level in [VerdictLevel.works, .likely, .native] {
             let names = current.filter { $0.verdict.level == level }.prefix(8).map(\.name)
             if !names.isEmpty { print("\(level.rawValue) e.g. " + names.joined(separator: ", ")) }
+        }
+    case "diagnose":
+        // What is wrong with this game? `--fix` applies every fix Stirred can do by itself.
+        guard args.count > 1 else { fail("usage: stirredctl diagnose <game> [--fix]") }
+        let game = try findGame(args[1])
+        let found = launcher.diagnose(game)
+        for d in found {
+            print("[\(d.severity)] \(d.title)\n    \(d.explanation)")
+            if let fix = d.fix { print("    fix: \(fix.label)") }
+        }
+        if args.contains("--fix") {
+            for d in found { if let fix = d.fix {
+                print("applying: \(fix.label)…")
+                try await launcher.apply(fix, to: game) { print("  \($0)") }
+            } }
+            print("Done. Run `stirredctl diagnose` again to check.")
         }
     case "check":
         // Will it run? Works for games you do not own or have not installed. Name, app id or store link.

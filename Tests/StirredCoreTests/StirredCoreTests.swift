@@ -853,3 +853,136 @@ struct LibraryAnalysisTests {
         #expect([VerdictLevel.no, .works, .maybe, .native, .unknown, .likely].sorted { $0.rank < $1.rank } == [.works, .native, .likely, .maybe, .unknown, .no])
     }
 }
+
+// MARK: - Diagnosis
+
+@Suite("Diagnosis rules")
+struct DiagnosisRuleTests {
+    private let game = Game(store: "steam", storeID: "1", name: "G", installDirectory: nil)
+    private func plan(_ recipe: Recipe? = nil, args: [String] = []) -> LaunchPlan {
+        var p = LaunchPlanner.plan(recipe: recipe, detectedAPIs: [.d3d11], hardware: HardwareProfile(memoryGB: 16))
+        p.gameArguments = args
+        return p
+    }
+    private func ids(_ input: DiagnosisInput) -> [String] { Diagnoser.diagnose(input).map(\.id) }
+    private func session(started: Bool) -> SessionRecord {
+        var record = SessionRecord(gameName: "G", store: "steam", storeID: "1", backend: "dxvk", latency: "low", engine: "e", processNeedle: "G.exe",
+                      startedAt: Date(timeIntervalSince1970: 0), endedAt: nil, environment: [:], planWarnings: [],
+                      system: SystemInfo(macOS: "27", chip: "M4", memoryGB: 16, lowPowerMode: false, onBattery: false),
+                      samples: [SessionSample(t: 0, gpuPercent: 10, cpuPercent: 10, rssMB: 100, processCount: started ? 1 : 0)])
+        record.neverDetected = !started
+        return record
+    }
+
+    @Test func aSessionThatWasNotWatchedIsNotAFailure() {
+        var unwatched = session(started: false)
+        unwatched.neverDetected = nil; unwatched.samples = []
+        #expect(Diagnoser.diagnose(DiagnosisInput(game: game, plan: plan(), lastSession: unwatched)).first?.id == "nothing")
+    }
+
+    @Test func aHealthyGameStillGetsAnAnswer() {
+        let out = Diagnoser.diagnose(DiagnosisInput(game: game, plan: plan()))
+        #expect(out.map(\.id) == ["nothing"] && out[0].fix == nil)
+    }
+
+    @Test func unityOnVulkanOffersTheArgumentOrExplainsStartingFromStirred() {
+        let vulkan = "Initialize engine\nMicrosoft Media Foundation video decoding to texture disabled: graphics device is Vulkan, only"
+        let fixable = Diagnoser.diagnose(DiagnosisInput(game: game, plan: plan(), logs: vulkan))
+        #expect(fixable.first?.id == "unity-vulkan" && fixable.first?.fix == .addLaunchArgument("-force-d3d11"))
+        let outside = Diagnoser.diagnose(DiagnosisInput(game: game, plan: plan(args: ["-force-d3d11"]), logs: vulkan))
+        #expect(outside.first?.id == "unity-vulkan-outside" && outside.first?.fix == nil)
+    }
+
+    @Test func blockersComeFirstAndHaveNoFix() {
+        let input = DiagnosisInput(game: game, plan: plan(), power: PowerState(lowPowerMode: true, onBattery: true),
+                                   logs: "Starting EasyAntiCheat bootstrapper")
+        let out = Diagnoser.diagnose(input)
+        #expect(out.first?.id == "anticheat" && out.first?.severity == .blocker && out.first?.fix == nil)
+        #expect(out.map(\.id).contains("low-power") && out.map(\.id).contains("battery"))
+        #expect(out == out.sorted { $0.severity < $1.severity })
+    }
+
+    @Test func fixableProblemsMapToOneClickFixes() {
+        #expect(ids(DiagnosisInput(game: game, plan: plan(), setupComplete: false)).first == "setup")
+        let missing = Diagnoser.diagnose(DiagnosisInput(game: game, plan: plan(), dxvkInstalledForGame: false))
+        #expect(missing.first?.fix == .reinstallGraphics)
+        #expect(Diagnoser.diagnose(DiagnosisInput(game: game, plan: plan(), steamDisplayFixInstalled: false)).first?.fix == .repairSteamDisplayFix)
+        #expect(Diagnoser.diagnose(DiagnosisInput(game: game, plan: plan(), staleProcessCount: 3)).first?.fix == .cleanUpProcesses)
+    }
+
+    @Test func aGameThatNeverStartedSuggestsDirectLaunch() {
+        let steamMode = Diagnoser.diagnose(DiagnosisInput(game: game, plan: plan(), lastSession: session(started: false)))
+        #expect(steamMode.first?.fix == .setLaunchMode(.direct))
+        let running = Diagnoser.diagnose(DiagnosisInput(game: game, plan: plan(), lastSession: session(started: true)))
+        #expect(running.first?.id == "nothing")
+    }
+
+    @Test func the32BitUnityCrashAndUnsupportedRecipesAreExplained() {
+        let crash = DiagnosisInput(game: game, plan: plan(), logs: "Crash!!!", isUnity: true, executableArchitecture: .x86)
+        #expect(ids(crash).first == "unity32")
+        let recipe = Recipe(appid: 1, name: "G", status: .unsupported, notes: "Known blocker")
+        let unsupported = Diagnoser.diagnose(DiagnosisInput(game: game, recipe: recipe, plan: plan(recipe)))
+        #expect(unsupported.first?.explanation == "Known blocker")
+    }
+
+    @Test func diskPipelineAndTextReport() {
+        let low = DiagnosisInput(game: game, plan: plan(), freeDiskBytes: 1_000_000_000,
+                                 logs: String(repeating: "Failed to compile pipeline\n", count: 6))
+        #expect(Set(ids(low)) == ["disk", "pipelines"])
+        let text = Diagnoser.text(for: game, diagnoses: Diagnoser.diagnose(low),
+                                  system: SystemInfo(macOS: "27", chip: "M4", memoryGB: 16, lowPowerMode: false, onBattery: false))
+        #expect(text.contains("Stirred diagnosis for G") && text.contains("Almost no free disk space"))
+    }
+}
+
+@Suite("Personal overrides")
+struct OverrideTests {
+    private func store() -> (OverrideStore, URL) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-ov-\(UUID().uuidString)")
+        return (OverrideStore(paths: StirredPaths(root: root)), root)
+    }
+    private let game = Game(store: "steam", storeID: "5", name: "Five", installDirectory: nil)
+
+    @Test func withoutOverridesTheRecipeIsUntouched() {
+        let (store, root) = store(); defer { try? FileManager.default.removeItem(at: root) }
+        #expect(store.apply(to: nil, game: game) == nil)
+        let recipe = Recipe(appid: 5, name: "Five", status: .playable)
+        #expect(store.apply(to: recipe, game: game) == recipe)
+    }
+
+    @Test func overridesAreMergedOverTheRecipeAndSurviveRestarts() throws {
+        let (store, root) = store(); defer { try? FileManager.default.removeItem(at: root) }
+        try store.update(5) { $0.launchArgs = ["-force-d3d11"]; $0.launchMode = .direct; $0.dxvkOptions = ["a": "1"] }
+        try store.update(5) { $0.launchArgs = ($0.launchArgs ?? []) + ["-force-d3d11", "-x"] }   // duplicates are not repeated
+        let recipe = Recipe(appid: 5, name: "Five", status: .playable, launchArgs: ["-dx11"], dxvkOptions: ["a": "0", "b": "2"])
+        let merged = try #require(store.apply(to: recipe, game: game))
+        #expect(merged.launchArgs == ["-dx11", "-force-d3d11", "-x"] && merged.launchMode == .direct)
+        #expect(merged.dxvkOptions == ["a": "1", "b": "2"] && merged.status == .playable)
+        // A fresh store object reads the same file back.
+        #expect(OverrideStore(paths: StirredPaths(root: root)).read(5).launchMode == .direct)
+        let synthesized = try #require(store.apply(to: nil, game: game))
+        #expect(synthesized.status == .unknown && synthesized.launchArgs == ["-force-d3d11", "-x"])
+    }
+
+    @Test func resetForgetsEverything() throws {
+        let (store, root) = store(); defer { try? FileManager.default.removeItem(at: root) }
+        try store.update(5) { $0.launchMode = .direct }
+        try store.reset(5)
+        #expect(store.read(5).isEmpty)
+        try store.update(5) { $0.launchMode = .direct }
+        try store.update(5) { $0.launchMode = nil }   // back to empty removes the file
+        #expect(!FileManager.default.fileExists(atPath: store.directory.appendingPathComponent("5.json").path))
+    }
+
+    @Test func applyingAFixPersistsItAndChangesTheNextPlan() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-fix-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let launcher = Launcher(paths: StirredPaths(root: root), recipesDirectory: root, resourcesDirectory: root)
+        let g = Game(store: "steam", storeID: "5", name: "Five", installDirectory: root.appendingPathComponent("common/F"))
+        #expect(launcher.plan(for: g).launchMode == .steam)
+        try await launcher.apply(.setLaunchMode(.direct), to: g)
+        try await launcher.apply(.addLaunchArgument("-force-d3d11"), to: g)
+        let plan = launcher.plan(for: g)
+        #expect(plan.launchMode == .direct && plan.gameArguments == ["-force-d3d11"])
+    }
+}

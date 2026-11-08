@@ -38,6 +38,17 @@ final class AppModel {
     var setupError: String?
     /// Set when the user opened Steam by hand: then Stirred never closes it for them.
     private var userOpenedSteam = false
+    // Diagnosis sheet
+    struct DiagnosisState {
+        var game: Game
+        var items: [Diagnosis]
+        var done: Set<String> = []
+        var busy: String?
+        var phase: String?
+        var error: String?
+        var hasOverrides = false
+    }
+    var diagnosis: DiagnosisState?
     // "All my games"
     var allGames: [LibraryEntry] = []
     var allGamesError: String?
@@ -247,6 +258,54 @@ final class AppModel {
             await MainActor.run { self?.installPhase[appID] = nil }
             await self?.refresh()
         }
+    }
+
+    /// Looks for known problems with this game (setup, graphics layer, logs, power...) and offers a fix for each.
+    func diagnose(_ game: Game) {
+        let launcher = self.launcher
+        Task.detached { [weak self] in
+            let items = launcher.diagnose(game)
+            let overrides = game.steamAppID.map { !launcher.overrides.read($0).isEmpty } ?? false
+            await MainActor.run { self?.diagnosis = DiagnosisState(game: game, items: items, hasOverrides: overrides) }
+        }
+    }
+
+    func applyFix(_ item: Diagnosis) {
+        guard let fix = item.fix, var state = diagnosis, state.busy == nil else { return }
+        state.busy = item.id; state.error = nil; state.phase = "Working…"
+        diagnosis = state
+        let game = state.game, launcher = self.launcher
+        Task.detached { [weak self] in
+            do {
+                try await launcher.apply(fix, to: game) { phase in
+                    Task { @MainActor in self?.diagnosis?.phase = phase }
+                }
+                let items = launcher.diagnose(game)
+                await MainActor.run {
+                    self?.diagnosis?.items = items
+                    self?.diagnosis?.done.insert(item.id)
+                    self?.diagnosis?.hasOverrides = game.steamAppID.map { !launcher.overrides.read($0).isEmpty } ?? false
+                }
+            } catch {
+                await MainActor.run { self?.diagnosis?.error = "\(error)" }
+            }
+            await MainActor.run { self?.diagnosis?.busy = nil; self?.diagnosis?.phase = nil }
+            await self?.refresh()
+        }
+    }
+
+    /// Forgets the settings fixes added for this game (the recipe applies again).
+    func resetSettings() {
+        guard let state = diagnosis, let appID = state.game.steamAppID else { return }
+        try? launcher.overrides.reset(appID)
+        diagnose(state.game)
+    }
+
+    func copyDiagnosis() {
+        guard let state = diagnosis else { return }
+        let text = Diagnoser.text(for: state.game, diagnoses: state.items, system: .current())
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     /// Step 1: work out what would be deleted, then let the user confirm.

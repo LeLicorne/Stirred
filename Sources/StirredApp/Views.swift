@@ -42,6 +42,15 @@ struct ContentView: View {
         // One flat background under the title: removes the lighter title strip and the notch where its edge met the divider.
         .toolbarBackground(.hidden, for: .windowToolbar)
         .navigationSplitViewStyle(.balanced)
+        .sheet(isPresented: Binding(get: { model.diagnosis != nil }, set: { if !$0 { model.diagnosis = nil } })) {
+            DiagnosisSheet()
+        }
+        // `open Stirred.app --args -diagnose muck` opens the diagnosis of a game (handy for screenshots).
+        .task {
+            guard let name = UserDefaults.standard.string(forKey: "diagnose"), !name.isEmpty else { return }
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            if let game = model.games.first(where: { $0.name.localizedCaseInsensitiveContains(name) }) { model.diagnose(game) }
+        }
     }
 }
 
@@ -241,6 +250,8 @@ struct GameCard: View {
                     Text(badge.text).font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 3)
                         .background(badge.color.opacity(0.25), in: Capsule())
                     Menu {
+                        Button("Diagnose…") { model.diagnose(game) }
+                        Divider()
                         Button("Uninstall…", role: .destructive) { model.askUninstall(game) }
                     } label: { Image(systemName: "ellipsis.circle") }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
@@ -270,6 +281,7 @@ struct GameCard: View {
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .contextMenu {
+            Button("Diagnose…") { model.diagnose(game) }.disabled(phase != nil)
             Button("Uninstall…", role: .destructive) { model.askUninstall(game) }.disabled(phase != nil)
         }
     }
@@ -293,6 +305,66 @@ struct GameCard: View {
             Button { model.play(game) } label: { Label("Play", systemImage: "play.fill") }
                 .buttonStyle(.borderedProminent)
                 .disabled(model.engineName == nil)
+        }
+    }
+}
+
+// MARK: - Diagnosis
+
+struct DiagnosisSheet: View {
+    @Environment(AppModel.self) private var model
+
+    private func style(_ severity: DiagnosisSeverity) -> (String, Color) {
+        switch severity {
+        case .blocker: ("xmark.octagon.fill", .red)
+        case .problem: ("exclamationmark.triangle.fill", .orange)
+        case .advice: ("lightbulb.fill", .blue)
+        }
+    }
+
+    var body: some View {
+        if let state = model.diagnosis {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Diagnose \(state.game.name)").font(.title2.bold())
+                Text("What Stirred found out about the last runs and your setup. Fixes apply to this game only and last.")
+                    .font(.callout).foregroundStyle(.secondary)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(state.items) { item in
+                            let (icon, color) = style(item.severity)
+                            HStack(alignment: .top, spacing: 12) {
+                                Image(systemName: icon).foregroundStyle(color).font(.title3)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(item.title).font(.headline)
+                                    Text(item.explanation).font(.callout).foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    if let fix = item.fix {
+                                        if state.busy == item.id {
+                                            HStack { ProgressView().controlSize(.small); Text(state.phase ?? "").font(.caption).foregroundStyle(.secondary) }
+                                        } else {
+                                            Button(fix.label) { model.applyFix(item) }.buttonStyle(.borderedProminent).controlSize(.small)
+                                                .disabled(state.busy != nil)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                            .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                    }
+                }
+                if !state.done.isEmpty {
+                    Label("Fixed. Press Play again to try.", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                }
+                if let error = state.error { Banner(text: error, color: .red) }
+                HStack {
+                    Button("Copy report") { model.copyDiagnosis() }
+                    if state.hasOverrides { Button("Reset my settings for this game") { model.resetSettings() } }
+                    Spacer()
+                    Button("Close") { model.diagnosis = nil }.keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(24).frame(width: 560, height: 520)
         }
     }
 }
@@ -577,6 +649,7 @@ struct Metric: View {
 }
 
 struct SessionDetail: View {
+    @Environment(AppModel.self) private var model
     let session: SessionSummary
     @State private var record: SessionRecord?
     @State private var findings: [String] = []
@@ -658,6 +731,9 @@ struct SessionDetail: View {
                 }
 
                 HStack {
+                    if let game = model.games.first(where: { $0.storeID == record?.storeID }) {
+                        Button("Diagnose this game") { model.diagnose(game) }.buttonStyle(.borderedProminent)
+                    }
                     Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([session.url]) }
                     Button("Copy report") {
                         NSPasteboard.general.clearContents()

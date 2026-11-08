@@ -16,6 +16,9 @@ Free, open source (GPL-3), built only from open-source components.
   with filters and search. Instant and offline; the verdicts then improve in the background as Stirred reads store details (slowly, with a disk cache).
 - **Check a game**: type a name or paste a Steam link and get a verdict *before* installing anything
   (tested here, native Mac version, anti-cheat, DirectX 12, Steam Deck status). You can install from there; the download shows on its card.
+- **Diagnose**: something wrong? The **…** menu of a game (or Activity) > **Diagnose…** looks at your setup, the game's logs and its last runs,
+  explains what it found in plain words and offers a one-click fix when one exists (missing graphics layer, Unity on Vulkan, stuck processes, a launch
+  that never started...). Fixes apply to that game only; **Reset my settings for this game** undoes them. CLI: `stirredctl diagnose <game> --fix`.
 - **Activity**: every launch is recorded (CPU, GPU, memory, crashes, graphics problems) with a plain-language summary.
 - **Logs**: Steam and graphics logs, searchable, with an "errors only" filter.
 - **One-time setup** inside the app: it downloads and installs everything it needs (about 300 MB).

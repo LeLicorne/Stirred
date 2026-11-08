@@ -73,7 +73,12 @@ public struct Launcher: Sendable {
         try steam().installedGames().filter { !Self.hiddenAppIDs.contains($0.storeID) }
     }
 
-    public func recipe(for game: Game) -> Recipe? { game.steamAppID.flatMap { recipes.recipe(forSteamAppID: $0) } }
+    public var overrides: OverrideStore { OverrideStore(paths: paths) }
+
+    /// The recipe with the user's personal settings (fixes applied by the diagnosis) on top.
+    public func recipe(for game: Game) -> Recipe? {
+        overrides.apply(to: game.steamAppID.flatMap { recipes.recipe(forSteamAppID: $0) }, game: game)
+    }
 
     public func processNeedle(for game: Game) -> String {
         GameExecutableFinder.candidates(in: game.installDirectory ?? paths.root).first?.lastPathComponent ?? game.name
@@ -322,11 +327,11 @@ extension SessionRecorder {
         var misses = 0
         while !shouldStop() {
             let now = Date()
-            if started == nil, now.timeIntervalSince(waitStart) > Double(waitSeconds) { onEvent("game process never appeared"); return }
+            if started == nil, now.timeIntervalSince(waitStart) > Double(waitSeconds) { record.neverDetected = true; onEvent("game process never appeared"); return }
             if let started, now.timeIntervalSince(started) >= Double(maxSeconds) { return }
             var sample = SystemSampler.sample(processNeedle: needle, at: 0)
             if sample.processCount > 0 {
-                if started == nil { started = now; onEvent("game detected") }
+                if started == nil { started = now; record.neverDetected = false; onEvent("game detected") }
                 misses = 0
                 sample.t = now.timeIntervalSince(started ?? now)
                 add(sample)

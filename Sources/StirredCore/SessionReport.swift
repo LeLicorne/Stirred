@@ -63,6 +63,8 @@ public struct SessionRecord: Codable, Sendable, Equatable {
     public var installDirName: String? = nil
     /// True when Stirred itself started Steam for this session (so it may close it afterwards).
     public var startedSteam: Bool? = nil
+    /// True only when the sampler waited for the game's process and it never appeared (a session that was not watched stays nil).
+    public var neverDetected: Bool? = nil
 }
 
 // MARK: - Sampling

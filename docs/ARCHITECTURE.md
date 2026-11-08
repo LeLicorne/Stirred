@@ -50,6 +50,14 @@ logs/                         steam-client.log (rotated at 20 MB), dxvk/, sessio
 6. Clean-up: processes left in the game's folder are killed (`stopGame`); if Stirred started Steam for this session and the user did not
    open it by hand, Steam is shut down gracefully (`steam.exe -shutdown`, so cloud saves finish syncing), then anything left is killed.
 
+## Diagnosis and personal overrides
+
+`Diagnoser.diagnose` is a pure function over a `DiagnosisInput` (setup state, plan, power, disk, the game's log text, the last session, whether DXVK is
+installed next to the executable, Unity/32-bit facts, stale processes), so every rule is unit-tested. `Launcher.diagnosisInput` gathers the facts and
+`Launcher.apply(_ fix:)` performs a `DiagnosisFix`. Settings fixes (extra launch argument, launch mode) are stored per game in
+`overrides/steam/<appid>.json` (`OverrideStore`) and merged over the recipe by `Launcher.recipe(for:)`, so they survive Stirred updates and do not touch the
+bundled recipes. A session only counts as "never started" when the sampler really waited for the process (`neverDetected`), not when it was not watched.
+
 ## Whole-library compatibility
 
 `SteamLocalData.swift` reads two of Steam's own binary cache files (`appcache/packageinfo.vdf`: which apps are licensed, `appcache/appinfo.vdf`:
