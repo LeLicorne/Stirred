@@ -13,6 +13,7 @@ WineContentView *macdrv_get_client_cocoa_view(HWND hwnd)
         {
             view = macdrv_create_view(cgrect_from_rect(rect));
             macdrv_set_view_superview(view, NULL, data->cocoa_window, NULL, NULL);
+            macdrv_set_view_hidden(view, FALSE);
             data->client_view = view;
         }
     }
@@ -48,6 +49,7 @@ static struct dxmt_win_data *dxmt_get_win_data(HWND hwnd)
         {
             compat->client_cocoa_view = macdrv_create_view(cgrect_from_rect(rect));
             macdrv_set_view_superview(compat->client_cocoa_view, NULL, data->cocoa_window, NULL, NULL);
+            macdrv_set_view_hidden(compat->client_cocoa_view, FALSE);
             data->client_view = compat->client_cocoa_view;
         }
     }
