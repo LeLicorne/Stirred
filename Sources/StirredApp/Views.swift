@@ -44,6 +44,7 @@ struct ContentView: View {
             case .logs: LogsView()
             }
         }
+        .zoomed()
         // One flat background under the title: removes the lighter title strip and the notch where its edge met the divider.
         .toolbarBackground(.hidden, for: .windowToolbar)
         .navigationSplitViewStyle(.balanced)
@@ -495,14 +496,31 @@ struct AllGamesView: View {
     }
 }
 
+/// App-wide zoom (⌘+ / ⌘- / ⌘0) for the content next to the sidebar: the layout is computed at the zoomed-out size,
+/// then scaled, so text and pictures stay sharp and everything grows together.
+struct Zoomed: ViewModifier {
+    @AppStorage("uiZoom") private var zoom: Double = 1
+
+    func body(content: Content) -> some View {
+        GeometryReader { geo in
+            content
+                .frame(width: geo.size.width / zoom, height: geo.size.height / zoom)
+                .scaleEffect(zoom, anchor: .topLeading)
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+        }
+    }
+}
+
+extension View { func zoomed() -> some View { modifier(Zoomed()) } }
+
 struct AllGamesRow: View {
     @Environment(AppModel.self) private var model
     let entry: LibraryEntry
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             GameCover(appID: entry.appID, name: entry.name)
-                .frame(width: 112, height: 52).clipShape(RoundedRectangle(cornerRadius: 6))
+                .frame(width: 150, height: 70).clipShape(RoundedRectangle(cornerRadius: 6))
             VStack(alignment: .leading, spacing: 3) {
                 Text(entry.name).font(.headline).lineLimit(1)
                 Text(entry.verdict.reasons.first ?? entry.verdict.headline)
