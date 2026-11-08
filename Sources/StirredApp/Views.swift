@@ -150,6 +150,9 @@ struct SteamStatusBar: View {
 struct LibraryView: View {
     @Environment(AppModel.self) private var model
     @AppStorage("closeSteamAfterPlaying") private var closeSteam = true
+    /// Smallest width of a card; the grid fits as many as the window allows. Slider in the toolbar, or pinch.
+    @AppStorage("cardWidth") private var cardWidth: Double = 280
+    @State private var pinchStart: Double?
 
     var body: some View {
         ScrollView {
@@ -175,13 +178,18 @@ struct LibraryView: View {
                         description: Text("Open Steam, sign in and install a game. It shows up here automatically."))
                         .padding(.top, 60)
                 } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 280, maximum: 360), spacing: 18, alignment: .top)], spacing: 18) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: cardWidth, maximum: cardWidth * 1.35), spacing: 18, alignment: .top)], spacing: 18) {
                         ForEach(model.games) { GameCard(game: $0) }
                     }
                 }
             }
             .padding(24)
         }
+        .gesture(MagnifyGesture().onChanged { value in
+            let start = pinchStart ?? cardWidth
+            pinchStart = start
+            cardWidth = min(640, max(200, start * value.magnification))
+        }.onEnded { _ in pinchStart = nil })
         .navigationTitle("Library")
         .confirmationDialog(
             "Uninstall \(model.pendingUninstall?.game.name ?? "")?",
@@ -196,6 +204,13 @@ struct LibraryView: View {
             Text("This deletes the game's files (\(ByteCountFormatter.string(fromByteCount: plan.bytes, countStyle: .file))) from this Mac. Your Steam Cloud saves are kept. Steam is closed first and starts again the next time you press Play.")
         }
         .toolbar {
+            ToolbarItem {
+                HStack(spacing: 4) {
+                    Image(systemName: "square.grid.3x3").foregroundStyle(.secondary)
+                    Slider(value: $cardWidth, in: 200...640).frame(width: 110)
+                    Image(systemName: "square.grid.2x2").foregroundStyle(.secondary)
+                }.help("Card size (you can also pinch the trackpad)")
+            }
             ToolbarItem {
                 Toggle(isOn: $closeSteam) { Label("Close Steam after playing", systemImage: "power") }
                     .toggleStyle(.button)
@@ -249,15 +264,7 @@ struct GameCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            AsyncImage(url: URL(string: "https://cdn.cloudflare.steamstatic.com/steam/apps/\(game.storeID)/header.jpg")) { image in
-                image.resizable().aspectRatio(460.0 / 215.0, contentMode: .fill)
-            } placeholder: {
-                Rectangle().fill(.quaternary).aspectRatio(460.0 / 215.0, contentMode: .fit)
-                    .overlay(Image(systemName: "gamecontroller").font(.largeTitle).foregroundStyle(.secondary))
-            }
-            .frame(maxWidth: .infinity)
-            .clipped()
-            .opacity(unsupported ? 0.5 : 1)
+            GameCover(appID: Int(game.storeID) ?? 0, name: game.name, dimmed: unsupported)
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline) {
@@ -494,10 +501,8 @@ struct AllGamesRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AsyncImage(url: URL(string: "https://cdn.cloudflare.steamstatic.com/steam/apps/\(entry.appID)/header.jpg")) { image in
-                image.resizable().aspectRatio(contentMode: .fill)
-            } placeholder: { Rectangle().fill(.quaternary) }
-            .frame(width: 112, height: 52).clipShape(RoundedRectangle(cornerRadius: 6))
+            GameCover(appID: entry.appID, name: entry.name)
+                .frame(width: 112, height: 52).clipShape(RoundedRectangle(cornerRadius: 6))
             VStack(alignment: .leading, spacing: 3) {
                 Text(entry.name).font(.headline).lineLimit(1)
                 Text(entry.verdict.reasons.first ?? entry.verdict.headline)

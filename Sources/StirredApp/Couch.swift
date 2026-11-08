@@ -144,12 +144,7 @@ struct CouchView: View {
     }
 
     private func card(_ game: Game, selected: Bool) -> some View {
-        AsyncImage(url: URL(string: "https://cdn.cloudflare.steamstatic.com/steam/apps/\(game.storeID)/header.jpg")) { image in
-            image.resizable().aspectRatio(460.0 / 215.0, contentMode: .fill)
-        } placeholder: {
-            Rectangle().fill(.gray.opacity(0.3)).aspectRatio(460.0 / 215.0, contentMode: .fit)
-                .overlay(Image(systemName: "gamecontroller").font(.largeTitle).foregroundStyle(.white.opacity(0.5)))
-        }
+        GameCover(appID: Int(game.storeID) ?? 0, name: game.name)
         .frame(width: 420, height: 196)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.accentColor, lineWidth: selected ? 5 : 0))

@@ -1452,3 +1452,23 @@ struct PresetTests {
         #expect(throws: BackupError.self) { try w.backup.restore("nope") }
     }
 }
+
+@Suite struct CoverSourcesTests {
+    @Test func prefersSteamsOwnDownloadedPicture() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-cover-\(UUID().uuidString)")
+        let hashed = root.appendingPathComponent("appcache/librarycache/42/abcdef", isDirectory: true)
+        try FileManager.default.createDirectory(at: hashed, withIntermediateDirectories: true)
+        try Data([1]).write(to: hashed.appendingPathComponent("library_hero.jpg"))
+        #expect(CoverSources.localCover(appID: 42, steamRoot: root)?.lastPathComponent == "library_hero.jpg")
+        try Data([1]).write(to: hashed.appendingPathComponent("library_header.jpg"))
+        #expect(CoverSources.localCover(appID: 42, steamRoot: root)?.lastPathComponent == "library_header.jpg")
+        #expect(CoverSources.localCover(appID: 43, steamRoot: root) == nil)
+    }
+
+    @Test func remoteCandidatesAndStableFallbackColour() {
+        let urls = CoverSources.remoteCandidates(appID: 7)
+        #expect(urls.count == 4 && urls.allSatisfy { $0.absoluteString.contains("/7/") })
+        #expect(CoverSources.fallbackHue(for: "Muck") == CoverSources.fallbackHue(for: "Muck"))
+        #expect((0...1).contains(CoverSources.fallbackHue(for: "RV There Yet?")))
+    }
+}
