@@ -12,6 +12,8 @@ Free, open source (GPL-3), built only from open-source components.
   Stirred starts Steam in the background for you (no window) and **closes it again when your game ends**, along with anything the
   game left behind (launchers, helpers). If you opened Steam yourself (for example to install a game), Stirred leaves it open until you
   press **Quit** in the sidebar. The toolbar switch "Close Steam after playing" turns this behaviour off.
+  Each card has a **preset** picker (Default / Faster / Balanced / Prettier): *Faster* = least input delay and less stutter, *Prettier* = even
+  pacing and a 60 FPS cap (cooler, quieter), *Balanced* in between. Presets change how the game is *run*, not the game's own graphics options.
 - **All my games**: every game your Steam install knows you own (not just the installed ones), ranked by how likely it is to run,
   with filters and search. Instant and offline; the verdicts then improve in the background as Stirred reads store details (slowly, with a disk cache).
 - **Check a game**: type a name or paste a Steam link and get a verdict *before* installing anything
