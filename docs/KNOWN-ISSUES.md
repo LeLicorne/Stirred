@@ -89,3 +89,8 @@ Rosetta 2 is to be reduced after macOS 27 (check Apple's current notes). Stirred
 ## Black 3D scene on Unreal / some Unity games (RV There Yet?, Orcs Must Die 3)
 - Symptom: menus and HUD draw, the 3D world is black. Logs show `[mvk-error] Render pipeline compile failed ... Fragment input(s) user(locn2) mismatching vertex shader output` for a pipeline with a geometry shader (MoltenVK has no geometry shaders; DXVK-macOS 1.10 skips them, so the fragment shader misses its inputs). DXVK also reports `shaderStorageImageExtendedFormats: 0`, which Unreal's post-processing needs.
 - Tried: forcing DirectX 11 (`-dx11`, makes the game start), `-FeatureLevelES31` (game exits at start-up). Nothing left to try with DXVK 1.10 on this stack; a fix would need MoltenVK or DXVK changes upstream.
+
+## DXMT retried (2026-11-08)
+- DXMT v0.80 (LGPL-2.1, supports geometry shaders) refuses to start on our Wine 11.21 (Gcenx): "Failed to create metal view ... no exported symbols". `winemac.so` exports 0 `macdrv_*` symbols; DXMT needs a Wine that exposes them (CrossOver 24+ built from CodeWeavers' free sources, or a Wine built with default symbol visibility).
+- Sikarugir's `WS12WineSikarugir11.0_1` engine does contain the exports but is not self-contained: `libinotify.0.dylib` and other libraries come from the Sikarugir app wrapper (`@rpath`, no LC_RPATH). With Gcenx's libraries on `DYLD_LIBRARY_PATH` wineserver runs but wineboot still fails to start.
+- Left to try: take the Frameworks from Sikarugir's wrapper template, or build CodeWeavers' Wine from source (hours of compiling). Neither is done. Everything downloaded for the test was deleted.
