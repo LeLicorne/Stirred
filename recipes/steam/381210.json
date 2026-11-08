@@ -1,0 +1,10 @@
+{
+ "appid": 381210,
+ "name": "Dead by Daylight",
+ "status": "unsupported",
+ "verified": false,
+ "blockers": [
+  "easy-anti-cheat"
+ ],
+ "notes": "Uses Easy Anti Cheat, which cannot run on macOS. From the publisher's public anti-cheat; not tested here. Stirred never tries to bypass an anti-cheat."
+}

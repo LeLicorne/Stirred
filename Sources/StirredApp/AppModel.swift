@@ -30,6 +30,14 @@ final class AppModel {
     var setupError: String?
     /// Set when the user opened Steam by hand: then Stirred never closes it for them.
     private var userOpenedSteam = false
+    // "Check a game"
+    var checkBusy = false
+    var checkError: String?
+    var checkResults: [StoreSearchResult] = []
+    var checkResult: GameCheck?
+    var installPhase: [Int: String] = [:]          // appID -> what Stirred is doing for the install
+    /// After an install: close the Steam Stirred started once the download is over.
+    private var installWatch: (startedSteam: Bool, sawDownload: Bool, since: Date)?
     /// The uninstall waiting for the user's confirmation.
     var pendingUninstall: UninstallPlan?
     private var started = false
@@ -66,6 +74,14 @@ final class AppModel {
         setupItems = snapshot.4
         setupComplete = snapshot.4.allSatisfy(\.done)
         warnings = PowerAdvice.warnings(for: .current)
+        if let watch = installWatch {
+            if games.contains(where: { $0.downloadProgress != nil }) {
+                installWatch?.sawDownload = true
+            } else if (watch.sawDownload || Date().timeIntervalSince(watch.since) > 900) && phases.isEmpty && installPhase.isEmpty {
+                installWatch = nil
+                if watch.startedSteam && !userOpenedSteam && closeSteamAfterPlaying { quitSteam() }
+            }
+        }
     }
 
     /// First-run installation (Wine, DXVK, Windows environment, Steam). Runs in the background.
@@ -117,6 +133,60 @@ final class AppModel {
                 await MainActor.run { self?.message = "\(error)" }
             }
             await MainActor.run { self?.phases[game.id] = nil }
+            await self?.refresh()
+        }
+    }
+
+    /// Looks a game up: an app id or store link gives a verdict, anything else is a name to search for.
+    func runCheck(_ input: String) {
+        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        checkBusy = true; checkError = nil; checkResult = nil; checkResults = []
+        let launcher = self.launcher
+        Task.detached { [weak self] in
+            do {
+                if let id = StoreClient.parseAppID(from: text) {
+                    let result = try await launcher.check(appID: id)
+                    await MainActor.run {
+                        self?.checkResult = result
+                        if result == nil { self?.checkError = "Steam has no public store page for app \(id)." }
+                    }
+                } else {
+                    let found = try await StoreClient().search(text)
+                    let best = StoreClient.bestMatch(found, for: text)
+                    let results = (best.map { [$0] } ?? []) + found.filter { $0.id != best?.id }
+                    await MainActor.run {
+                        self?.checkResults = results
+                        if results.isEmpty { self?.checkError = "No game found for \u{201C}\(text)\u{201D}." }
+                    }
+                }
+            } catch {
+                await MainActor.run { self?.checkError = "Could not reach Steam's store: \(error)" }
+            }
+            await MainActor.run { self?.checkBusy = false }
+        }
+    }
+
+    func openCheck(appID: Int) {
+        runCheck(String(appID))
+    }
+
+    /// Installs a game through Steam (Steam shows its own "Install" window to accept).
+    func installGame(appID: Int) {
+        guard installPhase[appID] == nil else { return }
+        message = nil
+        installPhase[appID] = "Starting…"
+        let launcher = self.launcher
+        Task.detached { [weak self] in
+            do {
+                let started = try await launcher.install(appID: appID) { phase in
+                    Task { @MainActor in self?.installPhase[appID] = phase }
+                }
+                await MainActor.run { self?.installWatch = (started, false, Date()) }
+            } catch {
+                await MainActor.run { self?.message = "\(error)" }
+            }
+            await MainActor.run { self?.installPhase[appID] = nil }
             await self?.refresh()
         }
     }

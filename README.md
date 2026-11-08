@@ -12,6 +12,8 @@ Free, open source (GPL-3), built only from open-source components.
   Stirred starts Steam in the background for you (no window) and **closes it again when your game ends**, along with anything the
   game left behind (launchers, helpers). If you opened Steam yourself (for example to install a game), Stirred leaves it open until you
   press **Quit** in the sidebar. The toolbar switch "Close Steam after playing" turns this behaviour off.
+- **Check a game**: type a name or paste a Steam link and get a verdict *before* installing anything
+  (tested here, native Mac version, anti-cheat, DirectX 12, Steam Deck status). You can install from there; the download shows on its card.
 - **Activity**: every launch is recorded (CPU, GPU, memory, crashes, graphics problems) with a plain-language summary.
 - **Logs**: Steam and graphics logs, searchable, with an "errors only" filter.
 - **One-time setup** inside the app: it downloads and installs everything it needs (about 300 MB).

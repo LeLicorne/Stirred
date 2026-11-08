@@ -12,7 +12,7 @@ test with a secondary Steam account · downloads only from the sources listed in
 - Verified games: Muck, HoloCure, Warframe, For The King II. See README and docs/KNOWN-ISSUES.md for numbers and workarounds.
 - Session reports (CPU/GPU sampling, redacted logs, findings), latency profiles, power warnings, bounded logs.
 
-## Not done / ideas, roughly by value
+## Not done / ideas, roughly by value (full ordered list in docs/ROADMAP.md)
 1. Verify first-run setup on a second machine. It was tested from scratch in a throw-away data folder (`STIRRED_ROOT`): Wine and DXVK downloaded and
    checksum-verified, prefix created, Steam installed and updated, display fix applied, a rendered sign-in window. Only the sign-in is manual.
 2. App button to update Warframe through its launcher (today: `Scripts/setup-warframe-launcher.sh` + `stirredctl run warframe --via-steam`).

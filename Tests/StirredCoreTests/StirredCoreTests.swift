@@ -650,3 +650,87 @@ struct UninstallTests {
         }
     }
 }
+
+@Suite("Check a game")
+struct CheckGameTests {
+    private func info(mac: Bool = false, notices: String = "", categories: [String] = []) -> StoreInfo {
+        StoreInfo(appID: 1, name: "G", isFree: false, windows: true, mac: mac, categories: categories, notices: notices, headerImage: nil)
+    }
+
+    @Test func appIDsAreParsedFromLinksAndNumbers() {
+        #expect(StoreClient.parseAppID(from: "1625450") == 1625450)
+        #expect(StoreClient.parseAppID(from: "https://store.steampowered.com/app/1625450/Muck/") == 1625450)
+        #expect(StoreClient.parseAppID(from: "steam://run/230410") == 230410)
+        #expect(StoreClient.parseAppID(from: "Muck") == nil)
+    }
+
+    @Test func storeJSONIsParsed() throws {
+        let json = #"{"7":{"success":true,"data":{"name":"Seven","is_free":true,"platforms":{"windows":true,"mac":true,"linux":false},"categories":[{"id":8,"description":"Valve Anti-Cheat enabled"}],"drm_notice":"Needs <b>Ubisoft Connect</b>","header_image":"https://x/y.jpg"}}}"#
+        let parsed = try #require(StoreClient.parseInfo(Data(json.utf8), appID: 7))
+        #expect(parsed.name == "Seven" && parsed.isFree && parsed.mac)
+        #expect(parsed.categories == ["Valve Anti-Cheat enabled"])
+        #expect(parsed.notices.contains("Ubisoft Connect") && !parsed.notices.contains("<b>"))
+        #expect(StoreClient.parseInfo(Data(#"{"7":{"success":false}}"#.utf8), appID: 7) == nil)
+        #expect(StoreClient.parseSearch(Data(#"{"items":[{"type":"app","id":3,"name":"Three"},{"type":"bundle","id":4,"name":"B"}]}"#.utf8)).map(\.id) == [3])
+        #expect(StoreClient.parseDeck(Data(#"{"success":1,"results":{"resolved_category":3}}"#.utf8)) == .verified)
+        #expect(StoreClient.parseDeck(Data("junk".utf8)) == .unknown)
+    }
+
+    @Test func verdictFollowsTheOrderOfAuthority() {
+        let tested = Recipe(appid: 1, name: "G", status: .playable, verified: true)
+        #expect(CompatVerdict.evaluate(info: info(), deck: .unsupported, recipe: tested).level == .works)
+        #expect(CompatVerdict.evaluate(info: info(notices: "Easy Anti-Cheat"), deck: .verified, recipe: nil).level == .no)
+        #expect(CompatVerdict.evaluate(info: info(notices: "Ubisoft Account"), deck: .verified, recipe: nil).level == .no)
+        #expect(CompatVerdict.evaluate(info: info(mac: true), deck: .unknown, recipe: nil).level == .native)
+        #expect(CompatVerdict.evaluate(info: info(), deck: .verified, recipe: nil).level == .likely)
+        #expect(CompatVerdict.evaluate(info: info(), deck: .playable, recipe: nil).level == .maybe)
+        #expect(CompatVerdict.evaluate(info: info(), deck: .unknown, recipe: nil).level == .unknown)
+        #expect(CompatVerdict.evaluate(info: info(categories: ["Valve Anti-Cheat enabled"]), deck: .verified, recipe: nil).level == .maybe)
+    }
+
+    @Test func manifestsReportSizeAndDownloadProgress() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-prog-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let engineBin = tmp.appendingPathComponent("engine/bin")
+        try FileManager.default.createDirectory(at: engineBin, withIntermediateDirectories: true)
+        let wine = engineBin.appendingPathComponent("wine")
+        try "#!/bin/sh\n".write(to: wine, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wine.path)
+        let runner = try WineRunner(engine: Engine(directory: tmp.appendingPathComponent("engine")), prefix: tmp)
+        let steam = SteamProvider(runner: runner, logsDirectory: tmp)
+        let apps = steam.steamRoot.appendingPathComponent("steamapps")
+        try FileManager.default.createDirectory(at: apps, withIntermediateDirectories: true)
+        try #""AppState" { "appid" "1" "name" "Done" "installdir" "Done" "StateFlags" "4" "SizeOnDisk" "2048" }"#
+            .write(to: apps.appendingPathComponent("appmanifest_1.acf"), atomically: true, encoding: .utf8)
+        try #""AppState" { "appid" "2" "name" "Busy" "installdir" "Busy" "StateFlags" "1026" "BytesToDownload" "1000" "BytesDownloaded" "250" }"#
+            .write(to: apps.appendingPathComponent("appmanifest_2.acf"), atomically: true, encoding: .utf8)
+        let games = try steam.installedGames()
+        let done = try #require(games.first { $0.storeID == "1" }), busy = try #require(games.first { $0.storeID == "2" })
+        #expect(done.downloadProgress == nil && done.sizeOnDisk == 2048)
+        #expect(busy.downloadProgress == 0.25)
+    }
+}
+
+@Suite("Check a game: DirectX and search")
+struct CheckGameExtraTests {
+    @Test func directXVersionComesFromTheMinimumRequirements() throws {
+        let json = #"{"9":{"success":true,"data":{"name":"Nine","pc_requirements":{"minimum":"<ul><li><strong>OS:</strong> Windows 10</li><li><strong>DirectX:</strong> Version 12</li></ul>"}}}}"#
+        #expect(try #require(StoreClient.parseInfo(Data(json.utf8), appID: 9)).directX == 12)
+        let none = #"{"9":{"success":true,"data":{"name":"Nine","pc_requirements":[]}}}"#
+        #expect(try #require(StoreClient.parseInfo(Data(none.utf8), appID: 9)).directX == nil)
+    }
+
+    @Test func directX12GamesAreRefusedButNativeMacWins() {
+        var info = StoreInfo(appID: 1, name: "G", isFree: false, windows: true, mac: false, categories: [], notices: "", headerImage: nil, directX: 12)
+        #expect(CompatVerdict.evaluate(info: info, deck: .verified, recipe: nil).level == .no)
+        info.mac = true
+        #expect(CompatVerdict.evaluate(info: info, deck: .verified, recipe: nil).level == .native)
+    }
+
+    @Test func exactNameBeatsStoreRelevanceOrder() {
+        let results = [StoreSearchResult(id: 2, name: "Hades II"), StoreSearchResult(id: 1, name: "Hades")]
+        #expect(StoreClient.bestMatch(results, for: "hades")?.id == 1)
+        #expect(StoreClient.bestMatch(results, for: "had")?.id == 2)
+        #expect(StoreClient.bestMatch([], for: "x") == nil)
+    }
+}

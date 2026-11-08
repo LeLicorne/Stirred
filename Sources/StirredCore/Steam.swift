@@ -6,6 +6,10 @@ public struct Game: Sendable, Equatable, Identifiable {
     public var storeID: String
     public var name: String
     public var installDirectory: URL?
+    /// From the manifest: bytes the game takes on disk.
+    public var sizeOnDisk: Int64? = nil
+    /// 0...1 while Steam is downloading or updating it, nil once fully installed.
+    public var downloadProgress: Double? = nil
     public var id: String { "\(store):\(storeID)" }
 
     public var steamAppID: Int? { store == "steam" ? Int(storeID) : nil }
@@ -58,7 +62,13 @@ public struct SteamProvider: GameStoreProvider {
                       let name = state["name"]?.stringValue else { return nil }
                 let dir = state["installdir"]?.stringValue
                     .map { steamapps.appendingPathComponent("common/\($0)", isDirectory: true) }
-                return Game(store: "steam", storeID: appID, name: name, installDirectory: dir)
+                let flags = Int(state["StateFlags"]?.stringValue ?? "") ?? 4
+                let toDownload = Double(state["BytesToDownload"]?.stringValue ?? "") ?? 0
+                let downloaded = Double(state["BytesDownloaded"]?.stringValue ?? "") ?? 0
+                // StateFlags bit 4 = fully installed; Steam clears it while downloading or updating.
+                let progress: Double? = (flags & 4) == 0 ? (toDownload > 0 ? min(1, downloaded / toDownload) : 0) : nil
+                return Game(store: "steam", storeID: appID, name: name, installDirectory: dir,
+                            sizeOnDisk: Int64(state["SizeOnDisk"]?.stringValue ?? ""), downloadProgress: progress)
             }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }

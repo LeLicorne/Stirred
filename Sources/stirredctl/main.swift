@@ -47,7 +47,7 @@ func printPlan(_ plan: LaunchPlan) {
 
 func run() async throws {
     guard let command = args.first else {
-        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|uninstall <game> [--yes]|library|plan <game>|run <game> [--watch] [--keep-steam] [--latency P] [--hud] [--async]|report [dir]>")
+        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|check <game>|uninstall <game> [--yes]|library|plan <game>|run <game> [--watch] [--keep-steam] [--latency P] [--hud] [--async]|report [dir]>")
         print("<game> is an appid or part of the name, e.g. `stirredctl run muck --watch`")
         return
     }
@@ -83,6 +83,22 @@ func run() async throws {
         guard launcher.steamState() == .ready else { fail("Steam is not ready: start it first (`stirredctl steam`) and log in.") }
         try launcher.requestInstall(appID: id)
         print("Steam should now show an install dialog for app \(id): accept it there.")
+    case "check":
+        // Will it run? Works for games you do not own or have not installed. Name, app id or store link.
+        guard args.count > 1 else { fail("usage: stirredctl check <name | appid | store link>") }
+        let query = args.dropFirst().filter { !$0.hasPrefix("--") }.joined(separator: " ")
+        var appID = StoreClient.parseAppID(from: query)
+        if appID == nil {
+            let results = try await StoreClient().search(query)
+            guard let best = StoreClient.bestMatch(results, for: query) else { fail("No game found for '\(query)'.") }
+            let others = results.filter { $0.id != best.id }.prefix(4)
+            if !others.isEmpty { print("Other matches: " + others.map { "\($0.name) (\($0.id))" }.joined(separator: ", ")) }
+            appID = best.id
+        }
+        guard let id = appID, let check = try await launcher.check(appID: id) else { fail("Steam has no public store page for that game.") }
+        print("\(check.info.name) (\(check.info.appID))\(check.info.mac ? "  [Mac version exists]" : "")  Steam Deck: \(check.deck)")
+        print("Verdict: \(check.verdict.level.rawValue.uppercased()): \(check.verdict.headline)")
+        for reason in check.verdict.reasons { print("  - \(reason)") }
     case "uninstall":
         // Shows what would be deleted; nothing is removed without --yes.
         guard args.count > 1 else { fail("usage: stirredctl uninstall <game> [--yes]") }

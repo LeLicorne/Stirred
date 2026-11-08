@@ -3,17 +3,17 @@ import Charts
 import StirredCore
 
 enum Section: String, CaseIterable, Identifiable {
-    case library = "Library", activity = "Activity", logs = "Logs"
+    case library = "Library", check = "Check a game", activity = "Activity", logs = "Logs"
     var id: String { rawValue }
     var icon: String {
-        switch self { case .library: "gamecontroller"; case .activity: "waveform.path.ecg"; case .logs: "doc.text.magnifyingglass" }
+        switch self { case .library: "gamecontroller"; case .check: "magnifyingglass"; case .activity: "waveform.path.ecg"; case .logs: "doc.text.magnifyingglass" }
     }
 }
 
 struct ContentView: View {
     @Environment(AppModel.self) private var model
     // `open Stirred.app --args -section activity` opens a given tab (handy for screenshots).
-    @State private var section: Section? = Section(rawValue: (UserDefaults.standard.string(forKey: "section") ?? "").capitalized) ?? .library
+    @State private var section: Section? = Section.allCases.first { !(UserDefaults.standard.string(forKey: "section") ?? "").isEmpty && $0.rawValue.lowercased().hasPrefix((UserDefaults.standard.string(forKey: "section") ?? "").lowercased()) } ?? .library
 
     var body: some View {
         switch model.setupComplete {
@@ -33,6 +33,7 @@ struct ContentView: View {
         } detail: {
             switch section ?? .library {
             case .library: LibraryView()
+            case .check: CheckView()
             case .activity: ActivityView()
             case .logs: LogsView()
             }
@@ -233,13 +234,16 @@ struct GameCard: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text(game.name).font(.headline).lineLimit(1)
                     Spacer(minLength: 8)
+                    if let size = game.sizeOnDisk, game.downloadProgress == nil {
+                        Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)).font(.caption).foregroundStyle(.secondary)
+                    }
                     Text(badge.text).font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 3)
                         .background(badge.color.opacity(0.25), in: Capsule())
                     Menu {
                         Button("Uninstall…", role: .destructive) { model.askUninstall(game) }
                     } label: { Image(systemName: "ellipsis.circle") }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                    .disabled(phase != nil)
+                    .disabled(phase != nil || game.downloadProgress != nil)
                     .help("More actions")
                 }
                 // Fixed height so every card has the same size, with or without notes.
@@ -270,7 +274,12 @@ struct GameCard: View {
     }
 
     @ViewBuilder private var action: some View {
-        if unsupported {
+        if let progress = game.downloadProgress {
+            VStack(alignment: .trailing, spacing: 4) {
+                ProgressView(value: progress).frame(width: 150)
+                Text("Downloading \(Int(progress * 100))%").font(.caption).foregroundStyle(.secondary)
+            }
+        } else if unsupported {
             Text("Can't run on macOS").font(.caption).foregroundStyle(.red)
         } else if let phase {
             if phase == "Playing" {
@@ -284,6 +293,106 @@ struct GameCard: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(model.engineName == nil)
         }
+    }
+}
+
+// MARK: - Check a game
+
+struct CheckView: View {
+    @Environment(AppModel.self) private var model
+    @State private var input = ""
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Will this game run on your Mac?").font(.title2.bold())
+                    Text("Type a game name, or paste its Steam store link. Nothing is installed.").foregroundStyle(.secondary)
+                }
+                HStack {
+                    TextField("A name, or https://store.steampowered.com/app/…", text: $input)
+                        .textFieldStyle(.roundedBorder).onSubmit { model.runCheck(input) }
+                    Button("Check") { model.runCheck(input) }
+                        .buttonStyle(.borderedProminent).disabled(input.isEmpty || model.checkBusy)
+                }
+                if model.checkBusy { ProgressView() }
+                if let error = model.checkError { Banner(text: error, color: .orange) }
+                if !model.checkResults.isEmpty {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(model.checkResults) { result in
+                            Button { model.openCheck(appID: result.id) } label: {
+                                HStack { Text(result.name); Spacer(); Image(systemName: "chevron.right").foregroundStyle(.secondary) }
+                                    .padding(.vertical, 8).contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            Divider()
+                        }
+                    }
+                }
+                if let check = model.checkResult { VerdictCard(check: check) }
+            }
+            .padding(24).frame(maxWidth: 720, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity)
+        .navigationTitle("Check a game")
+    }
+}
+
+struct VerdictCard: View {
+    @Environment(AppModel.self) private var model
+    let check: GameCheck
+
+    private var style: (color: Color, icon: String) {
+        switch check.verdict.level {
+        case .works: (.green, "checkmark.seal.fill")
+        case .likely: (.mint, "checkmark.circle.fill")
+        case .native: (.blue, "apple.logo")
+        case .maybe: (.orange, "questionmark.circle.fill")
+        case .no: (.red, "xmark.octagon.fill")
+        case .unknown: (.gray, "questionmark.diamond.fill")
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            AsyncImage(url: check.info.headerImage) { $0.resizable().aspectRatio(contentMode: .fit) } placeholder: {
+                Rectangle().fill(.quaternary).frame(height: 120)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            HStack {
+                Text(check.info.name).font(.title2.bold())
+                if check.info.isFree { Text("Free").font(.caption.bold()).padding(.horizontal, 8).padding(.vertical, 2)
+                    .background(.green.opacity(0.25), in: Capsule()) }
+            }
+            Label(check.verdict.headline, systemImage: style.icon)
+                .font(.headline).foregroundStyle(style.color)
+                .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                .background(style.color.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(check.verdict.reasons, id: \.self) { Text("\u{2022} \($0)").fixedSize(horizontal: false, vertical: true) }
+            }
+            .font(.callout).foregroundStyle(.secondary)
+            HStack {
+                if check.installed {
+                    Label("Already installed", systemImage: "checkmark").foregroundStyle(.secondary)
+                } else if let phase = model.installPhase[check.info.appID] {
+                    ProgressView().controlSize(.small); Text(phase).font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Button { model.installGame(appID: check.info.appID) } label: {
+                        Label(check.verdict.level == .no ? "Install anyway" : "Install", systemImage: "arrow.down.circle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(check.verdict.level == .no ? .gray : .accentColor)
+                    .disabled(model.engineName == nil)
+                }
+                Spacer()
+                Link("Steam page", destination: URL(string: "https://store.steampowered.com/app/\(check.info.appID)")!)
+            }
+            Text("Steam shows its own \u{201C}Install\u{201D} window: accept it there. The download then appears in your Library.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(18)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12))
     }
 }
 

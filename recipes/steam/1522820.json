@@ -1,7 +1,7 @@
 {
  "appid": 1522820,
  "name": "Orcs Must Die! 3",
- "status": "experimental",
+ "status": "unsupported",
  "verified": true,
  "graphics": "dxvk",
  "launch_args": [

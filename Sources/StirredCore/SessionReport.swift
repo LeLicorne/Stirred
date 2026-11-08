@@ -353,7 +353,18 @@ public struct SessionRecorder: Sendable {
         // Steam writes `assert_<exe>` dumps for non-fatal assertions (e.g. overlay): the game usually keeps running.
         let assertions = gameDumps.filter { $0.hasPrefix("assert_") }
         let dumps = gameDumps.filter { !$0.hasPrefix("assert_") }
-        let extra = assertions.isEmpty ? [] : ["Steam recorded \(assertions.count) assertion dump(s) (\(assertions[0])). Usually non-fatal (the game keeps running); only a concern if the game also closed."]
+        var extra: [String] = []
+        let everything = excerpts.map(\.text).joined(separator: "\n")
+        if everything.contains("graphics device is Vulkan") {
+            extra.append("Unity used Vulkan, which can show missing textures through MoltenVK. What to try: add \"-force-d3d11\" to the recipe's launch_args and start the game from Stirred (it does this for Unity games by itself).")
+        }
+        if everything.range(of: CompatVerdict.antiCheat, options: .regularExpression) != nil {
+            extra.append("An anti-cheat (Easy Anti-Cheat, BattlEye, Vanguard...) shows up in the logs. These cannot run on macOS: this game will not work online, and often not at all.")
+        }
+        if everything.contains("Failed to create metal view") {
+            extra.append("DXMT cannot create its Metal view on this Wine. What to try: use DXVK (recipe \"graphics\": \"dxvk\"), which is the default.")
+        }
+        extra += assertions.isEmpty ? [] : ["Steam recorded \(assertions.count) assertion dump(s) (\(assertions[0])). Usually non-fatal (the game keeps running); only a concern if the game also closed."]
         let crash = !dumps.isEmpty || excerpts.contains { $0.name.hasPrefix("unity-Player") && $0.text.contains("Crash!!!") }
         for (name, text) in excerpts { try text.write(to: excerptsDir.appendingPathComponent(name), atomically: true, encoding: .utf8) }
 

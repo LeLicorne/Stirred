@@ -181,6 +181,30 @@ public struct Launcher: Sendable {
         try process.run()
     }
 
+    /// Installs a game from Stirred: starts Steam if needed, waits until it is signed in, then asks it to install.
+    /// Steam still shows its own confirmation window ("Install"): the user accepts it there.
+    /// Returns true if Stirred started Steam for this.
+    @discardableResult
+    public func install(appID: Int, onPhase: @Sendable (String) -> Void = { _ in }) async throws -> Bool {
+        var started = false
+        var since = Date.distantPast
+        var timeout: TimeInterval = 240
+        if steamState() == .stopped {
+            let remembered = (try? steam().hasRememberedLogin) ?? false
+            onPhase(remembered ? "Starting Steam…" : "Sign in to Steam in the window that opens…")
+            if !remembered { timeout = 600 }
+            since = Date(); started = true
+            try startSteam(silent: true)
+        }
+        onPhase("Waiting for Steam…")
+        guard await waitUntilSteamReady(since: since, timeout: timeout) else {
+            throw StirredError.blocked("Steam did not finish starting. Use Open Steam to check that you are signed in.")
+        }
+        onPhase("Accept the install window Steam shows…")
+        try requestInstall(appID: appID)
+        return started
+    }
+
     /// Stops Steam and every Wine process of the engine. Graceful first (`steam.exe -shutdown` lets Steam finish
     /// syncing cloud saves and playtime), then whatever is left is killed.
     public func quitSteam(graceful: Bool = true) async {
