@@ -41,6 +41,10 @@ Measured on an Apple M4, 16 GB, macOS 27, Wine staging 11.21 (Gcenx), DXVK-macOS
   `Scripts/setup-warframe-launcher.sh`, then `stirredctl run warframe --via-steam`, wait for `Launcher.log` to say
   *"Finished Preprocess"*, close the launcher (its window stays white and its GPU process burns CPU), then play normally.
   The launcher's hardware check needs a working D3D11 (DXVK provides it) while its Chromium must have no shader compiler.
+- **Orcs Must Die! 3** (Unreal Engine 4): the 2D interface draws, the 3D scene stays black. DXVK is loaded; MoltenVK fails to compile 2
+  pipelines ("Fragment input(s) `user(locn2)` mismatching vertex shader output type(s) or not written by vertex shader": Direct3D allows
+  a pixel shader to read a value the vertex shader never wrote, Metal does not). Replacing the engine's MoltenVK by 1.4.2 did not change it.
+  Untried: another DXVK build, Unreal console variables to skip the failing pass, wined3d (OpenGL).
 - **Trackmania**: `Trackmania.exe` only starts Ubisoft Connect, which spins at ~100% CPU on several processes and never starts the game
   (`launcher_log`: "StartReqError ... code: 109"; missing `HKCR\uplay` keys). Wrapping `UplayWebCore.exe` calmed Chromium but not the service.
 - Kernel anti-cheat (EAC, BattlEye, Vanguard) never works on macOS; Stirred flags such games and never tries to bypass them.
