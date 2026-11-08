@@ -1,0 +1,12 @@
+{
+ "appid": 3949040,
+ "name": "RV There Yet?",
+ "status": "experimental",
+ "verified": false,
+ "graphics": "dxvk",
+ "latency": "low",
+ "launch_args": [
+  "-dx11"
+ ],
+ "notes": "Unreal Engine 5. By default the game picks DirectX 12, which fails under Wine ('A D3D11-compatible GPU (Feature Level 11.0, Shader Model 5.0) is required'). Forced to DirectX 11 through DXVK-macOS with -dx11 (2026-11-08, M4 16 GB): the game starts, loads the map and shows the world, then crashed about 15 s later (EXCEPTION_ACCESS_VIOLATION writing address 0, no symbols). Not playable yet. Multiplayer (Epic Online Services) untested: the log says no online services are present."
+}
