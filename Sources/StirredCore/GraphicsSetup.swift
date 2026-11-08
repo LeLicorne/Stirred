@@ -103,12 +103,23 @@ public enum DXVKInstaller {
 public enum GameExecutableFinder {
     private static let ignoredFragments = ["crash", "unins", "setup", "redist", "vcredist", "dxsetup", "helper", "launcher_"]
 
-    /// Likely game executables at the top of an install directory (skips crash handlers, installers…).
+    /// Likely game executables: Unreal's real executable first (`<Project>/Binaries/Win64/*-Win64-Shipping.exe`, the
+    /// top-level .exe is only a launcher stub), then .exe files at the top of the install directory
+    /// (skipping crash handlers, installers...).
     public static func candidates(in directory: URL) -> [URL] {
-        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-        return files.filter { url in
+        let fm = FileManager.default
+        let children = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
+        var unreal: [URL] = []
+        for child in children where child.hasDirectoryPath && child.lastPathComponent != "Engine" {
+            let bin = child.appendingPathComponent("Binaries/Win64", isDirectory: true)
+            let shipping = ((try? fm.contentsOfDirectory(at: bin, includingPropertiesForKeys: nil)) ?? [])
+                .filter { $0.lastPathComponent.hasSuffix("-Win64-Shipping.exe") }
+            unreal.append(contentsOf: shipping)
+        }
+        let top = children.filter { url in
             let name = url.lastPathComponent.lowercased()
             return url.pathExtension.lowercased() == "exe" && !ignoredFragments.contains { name.contains($0) }
         }
+        return unreal + top
     }
 }

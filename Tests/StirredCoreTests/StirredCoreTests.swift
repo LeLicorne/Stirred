@@ -546,3 +546,19 @@ struct UnityDefaultTests {
         #expect(launcher.plan(for: unityVulkan).gameArguments == ["-force-vulkan"])
     }
 }
+
+@Suite("Unreal executables")
+struct UnrealFinderTests {
+    @Test func shippingExecutableComesFirstAndEngineIsIgnored() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-ue-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        for sub in ["OMD/Binaries/Win64", "Engine/Binaries/Win64"] {
+            try FileManager.default.createDirectory(at: tmp.appendingPathComponent(sub), withIntermediateDirectories: true)
+        }
+        try Data().write(to: tmp.appendingPathComponent("Game Stub.exe"))
+        try Data().write(to: tmp.appendingPathComponent("OMD/Binaries/Win64/OMD-Win64-Shipping.exe"))
+        try Data().write(to: tmp.appendingPathComponent("Engine/Binaries/Win64/Other-Win64-Shipping.exe"))
+        let names = GameExecutableFinder.candidates(in: tmp).map(\.lastPathComponent)
+        #expect(names == ["OMD-Win64-Shipping.exe", "Game Stub.exe"])
+    }
+}
