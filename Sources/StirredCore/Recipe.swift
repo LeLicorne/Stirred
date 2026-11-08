@@ -32,17 +32,19 @@ public struct Recipe: Codable, Sendable, Equatable {
     public var launchArgs: [String]?
     public var latency: LatencyProfile?
     public var launchMode: LaunchMode?
+    /// Extra per-game DXVK settings written to dxvk.conf, e.g. `"d3d11.zeroWorkgroupMemory": "True"`.
+    public var dxvkOptions: [String: String]?
     public var notes: String?
 
     public init(
         appid: Int, name: String, status: CompatStatus, verified: Bool = false,
         blockers: [String]? = nil, graphics: GraphicsBackend? = nil,
         env: [String: String]? = nil, dllOverrides: [String: String]? = nil,
-        launchArgs: [String]? = nil, latency: LatencyProfile? = nil, launchMode: LaunchMode? = nil, notes: String? = nil
+        launchArgs: [String]? = nil, latency: LatencyProfile? = nil, launchMode: LaunchMode? = nil, dxvkOptions: [String: String]? = nil, notes: String? = nil
     ) {
         self.appid = appid; self.name = name; self.status = status; self.verified = verified
         self.blockers = blockers; self.graphics = graphics; self.env = env
-        self.dllOverrides = dllOverrides; self.launchArgs = launchArgs; self.latency = latency; self.launchMode = launchMode; self.notes = notes
+        self.dllOverrides = dllOverrides; self.launchArgs = launchArgs; self.latency = latency; self.launchMode = launchMode; self.dxvkOptions = dxvkOptions; self.notes = notes
     }
 }
 

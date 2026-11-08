@@ -21,6 +21,7 @@ public struct LaunchPlan: Sendable, Equatable {
     public var blockedReason: String?
     public var latency: LatencyProfile
     public var launchMode: LaunchMode
+    public var dxvkOptions: [String: String]
 }
 
 public enum LaunchPlanner {
@@ -90,6 +91,7 @@ public enum LaunchPlanner {
             backend: backend, environment: env, gameArguments: recipe?.launchArgs ?? [],
             warnings: warnings, requiredComponents: components, blockedReason: blocked,
             latency: latency ?? recipe?.latency ?? .low,
-            launchMode: recipe?.launchMode ?? .steam)
+            launchMode: recipe?.launchMode ?? .steam,
+            dxvkOptions: recipe?.dxvkOptions ?? [:])
     }
 }

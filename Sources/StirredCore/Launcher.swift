@@ -110,7 +110,7 @@ public struct Launcher: Sendable {
             let arch = PEInfo.architecture(ofFile: exe)
             guard arch == .x86 || arch == .x64 else { continue }
             try DXVKInstaller.install(package: dxvkPackage, executable: exe, architecture: arch, latency: plan.latency,
-                                      hud: options.hud, asyncShaders: options.asyncShaders)
+                                      hud: options.hud, asyncShaders: options.asyncShaders, extra: plan.dxvkOptions)
             for command in DXVKInstaller.registryCommands(executableName: exe.lastPathComponent) {
                 _ = try await runner.runAndWait(arguments: command)
             }

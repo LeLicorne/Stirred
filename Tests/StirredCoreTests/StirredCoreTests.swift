@@ -562,3 +562,16 @@ struct UnrealFinderTests {
         #expect(names == ["OMD-Win64-Shipping.exe", "Game Stub.exe"])
     }
 }
+
+@Suite("Per-game DXVK options")
+struct DXVKOptionsTests {
+    @Test func recipeOptionsReachDxvkConf() throws {
+        let json = #"{"appid":1,"name":"G","status":"playable","verified":false,"dxvk_options":{"d3d11.zeroWorkgroupMemory":"True","dxvk.useRawSsbo":"True"}}"#
+        let decoder = JSONDecoder(); decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let recipe = try decoder.decode(Recipe.self, from: Data(json.utf8))
+        let plan = LaunchPlanner.plan(recipe: recipe, detectedAPIs: [], hardware: HardwareProfile(memoryGB: 16))
+        #expect(plan.dxvkOptions["dxvk.useRawSsbo"] == "True")
+        let conf = DXVKConfig.render(latency: .low, extra: plan.dxvkOptions)
+        #expect(conf.contains("d3d11.zeroWorkgroupMemory = True") && conf.contains("dxvk.useRawSsbo = True"))
+    }
+}

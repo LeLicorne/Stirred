@@ -1,1 +1,14 @@
-{"appid":1522820,"name":"Orcs Must Die! 3","status":"experimental","verified":true,"graphics":"dxvk","launch_args":["-dx11"],"blockers":["black-3d-scene"],"notes":"Unreal Engine 4, 64-bit, no anti-cheat. DXVK loads and the 2D interface renders, but the 3D scene (menu background and game) stays black. MoltenVK fails to compile 2 pipelines: 'Fragment input(s) user(locn2) mismatching vertex shader output type(s) or not written by vertex shader' (Metal is stricter than Direct3D). MoltenVK 1.4.2 gives the same error. Not playable yet."}
+{
+ "appid": 1522820,
+ "name": "Orcs Must Die! 3",
+ "status": "experimental",
+ "verified": true,
+ "graphics": "dxvk",
+ "launch_args": [
+  "-dx11"
+ ],
+ "blockers": [
+  "black-3d-scene"
+ ],
+ "notes": "Unreal Engine 4, 64-bit, no anti-cheat. The 2D interface renders but the whole 3D scene (menu background and game) stays black. Tried without success: MoltenVK 1.4.2, Unreal SM4 (-sm4), disabling auto-exposure/tiled lighting/volumetric fog/translucency volume, Wine's own D3D11 (refuses: needs Feature Level 11.0), DXVK options (constant buffer range check, zero workgroup memory, raw SSBO, cached dynamic resources). Parked."
+}
