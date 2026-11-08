@@ -199,6 +199,16 @@ func run() async throws {
         } else {
             print("tip: add --watch to sample CPU/GPU while you play, or run `stirredctl report` afterwards")
         }
+    case "update":
+        guard args.count > 1 else { fail("usage: stirredctl update <game>") }
+        let game = try findGame(args[1])
+        guard let updater = launcher.updater(for: game) else { fail("\(game.name) has no updater known to Stirred.") }
+        for line in try await launcher.prepareUpdater(for: game) { print(line) }
+        print("Running \(updater.executable) through Steam; close it when it says the game is up to date.")
+        var recorder = try await launcher.play(game, options: LaunchOptions(launchMode: .steam)) { print($0) }
+        await recorder.watch(maxSeconds: intOption("--seconds", default: 3600), onEvent: { print($0) })
+        _ = try? launcher.finish(&recorder)
+        await launcher.cleanUpAfterGame(game, startedSteam: recorder.record.startedSteam ?? false, keepSteam: args.contains("--keep-steam"), otherGamesRunning: false)
     case "report":
         let dir = args.count > 1 ? URL(fileURLWithPath: args[1])
             : SessionRecorder.sessionsDirectory(launcher.paths).appendingPathComponent("latest").resolvingSymlinksInPath()

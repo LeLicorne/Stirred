@@ -61,3 +61,7 @@ Measured on an Apple M4, 16 GB, macOS 27, Wine staging 11.21 (Gcenx), DXVK-macOS
 ## Long-term risk
 
 Rosetta 2 is to be reduced after macOS 27 (check Apple's current notes). Stirred needs it to run x86 Wine.
+
+## Game updater (Warframe)
+- "Update game" prepares the game's launcher for Wine (DXVK next to it, shader compiler disabled for it only) and runs it through Steam. Checked 2026-11-08 on an up-to-date game: Steam started the launcher and it ended by itself after about 20 s. An actual update (when Warframe asks for one) has not been re-tested since this button replaced the manual script.
+- Only recipes with an `updater` entry get the button (Warframe today).

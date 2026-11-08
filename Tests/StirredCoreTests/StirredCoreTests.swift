@@ -1056,3 +1056,18 @@ struct PresetTests {
         #expect(launcher.preset(for: game) == nil)
     }
 }
+
+@Suite struct UpdaterTests {
+    @Test func warframeRecipeDeclaresItsUpdater() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("recipes/steam/230410.json")
+        let decoder = JSONDecoder(); decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let recipe = try decoder.decode(Recipe.self, from: Data(contentsOf: url))
+        #expect(recipe.updater?.executable == "Tools/Launcher.exe")
+        #expect(recipe.updater?.disabledDlls?.contains("d3dcompiler_47") == true)
+    }
+
+    @Test func gamesWithoutUpdaterHaveNone() {
+        #expect(Recipe(appid: 1, name: "X", status: .playable).updater == nil)
+    }
+}

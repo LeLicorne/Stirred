@@ -10,7 +10,7 @@ Ideas ordered from most to least valuable (product/UX view). Status: **Done**, *
 | 4 | **Install from Stirred** with progress | **Done** | Install in "Check a game"; download progress and size on Library cards; Steam closes after the download if Stirred started it. Steam still shows its own "Install" window to accept |
 | 5 | **Per-game presets Faster / Balanced / Prettier** | **Done (limited)** | Picker on each card, saved per game; `stirredctl preset <game> [name]`. Only levers Stirred controls and verified: frame queue and V-Sync, background shader compilation, a 60 FPS cap. Not done: the game's *own* graphics options (per-engine config files, e.g. Unreal `Engine.ini`) and a render-resolution lever (Unity's `-screen-width` is overridden by games like Muck) |
 | 6 | Detect games with a native Mac version | **Done** | Part of the verdict ("play that one") |
-| 7 | Pre-launch tasks in recipes (Warframe launcher update as an "Update" button) | Queued | Today: `Scripts/setup-warframe-launcher.sh` + `stirredctl run warframe --via-steam` |
+| 7 | Pre-launch tasks in recipes (Warframe launcher update as an "Update" button) | Done (Warframe only) | Recipe `updater` + "Update game" menu item + `stirredctl update <game>`; replaces `Scripts/setup-warframe-launcher.sh`. Generic pre-launch tasks not done |
 | 8 | Community recipes + anonymous "report result" | Queued | The lever for scale. Opt-in only, GitHub-hosted signed JSON, needs a privacy design and moderation |
 | 9 | Other stores (GOG first, then Epic via Legendary) | Queued | Plug into `GameStoreProvider`; one store at a time, each is fragile |
 | 10 | Disk management: size per game, move to an external disk, low-space alert | Partly | Size is shown on cards; uninstall is done |

@@ -133,6 +133,34 @@ public struct Launcher: Sendable {
         return lines
     }
 
+    // MARK: Game updater
+
+    public func updater(for game: Game) -> GameUpdater? { recipe(for: game)?.updater }
+
+    /// Gets the game's own updater ready for Wine (see `GameUpdater`) and returns the lines describing what was done.
+    @discardableResult
+    public func prepareUpdater(for game: Game) async throws -> [String] {
+        guard let updater = updater(for: game), let dir = game.installDirectory else {
+            throw StirredError.blocked("\(game.name) has no updater known to Stirred.")
+        }
+        let exe = dir.appendingPathComponent(updater.executable)
+        guard FileManager.default.fileExists(atPath: exe.path) else {
+            throw StirredError.blocked("The updater \(updater.executable) is not in the game folder yet. Let Steam finish installing the game.")
+        }
+        guard FileManager.default.fileExists(atPath: dxvkPackage.path) else {
+            throw StirredError.blocked("DXVK component missing at \(dxvkPackage.path).")
+        }
+        let arch = PEInfo.architecture(ofFile: exe)
+        try DXVKInstaller.install(package: dxvkPackage, executable: exe, architecture: arch == .x86 ? .x86 : .x64,
+                                  latency: .low, hud: false, asyncShaders: false, extra: [:])
+        let runner = try runner()
+        let key = "HKCU\\Software\\Wine\\AppDefaults\\\(exe.lastPathComponent)\\DllOverrides"
+        var commands = DXVKInstaller.registryCommands(executableName: exe.lastPathComponent)
+        for dll in updater.disabledDlls ?? [] { commands.append(["reg", "add", key, "/v", dll, "/d", "", "/f"]) }
+        for command in commands { _ = try await runner.runAndWait(arguments: command) }
+        return ["updater \(updater.executable) prepared (\(commands.count) settings)"]
+    }
+
     // MARK: Steam lifecycle
 
     public static func isSteamClientRunning(psOutput: String) -> Bool {

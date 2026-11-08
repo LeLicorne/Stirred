@@ -132,6 +132,8 @@ final class AppModel {
 
     func recipe(for game: Game) -> Recipe? { launcher.recipe(for: game) }
 
+    func hasUpdater(_ game: Game) -> Bool { launcher.updater(for: game) != nil }
+
     func preset(for game: Game) -> QualityPreset? {
         _ = presetRevision
         return launcher.preset(for: game)
@@ -142,23 +144,25 @@ final class AppModel {
         presetRevision += 1
     }
 
-    func play(_ game: Game) {
+    /// `update`: run the game's own updater through Steam instead of the game.
+    func play(_ game: Game, update: Bool = false) {
         guard phases[game.id] == nil else { return }
         message = nil
-        phases[game.id] = "Preparing…"
-        let options = LaunchOptions(hud: showHUD)
+        phases[game.id] = update ? "Preparing update…" : "Preparing…"
+        let options = update ? LaunchOptions(launchMode: .steam) : LaunchOptions(hud: showHUD)
         let launcher = self.launcher
         Task.detached { [weak self] in
             do {
+                if update { try await launcher.prepareUpdater(for: game) }
                 var recorder = try await launcher.play(game, options: options) { phase in
                     Task { @MainActor in self?.phases[game.id] = phase }
                 }
-                await MainActor.run { self?.phases[game.id] = "Playing" }
+                await MainActor.run { self?.phases[game.id] = update ? "Updating" : "Playing" }
                 await recorder.watch(maxSeconds: 8 * 3600)
                 try launcher.finish(&recorder)
                 let (keep, others) = await MainActor.run { () -> (Bool, Bool) in
                     guard let self else { return (true, true) }
-                    let others = self.phases.contains { $0.key != game.id && $0.value == "Playing" }
+                    let others = self.phases.contains { $0.key != game.id && ($0.value == "Playing" || $0.value == "Updating") }
                     return (self.userOpenedSteam || !self.closeSteamAfterPlaying, others)
                 }
                 await launcher.cleanUpAfterGame(game, startedSteam: recorder.record.startedSteam ?? false,

@@ -250,6 +250,7 @@ struct GameCard: View {
                     Text(badge.text).font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 3)
                         .background(badge.color.opacity(0.25), in: Capsule())
                     Menu {
+                        if model.hasUpdater(game) { Button("Update game") { model.play(game, update: true) } }
                         Button("Diagnose…") { model.diagnose(game) }
                         Divider()
                         Button("Uninstall…", role: .destructive) { model.askUninstall(game) }
@@ -287,6 +288,7 @@ struct GameCard: View {
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .contextMenu {
+            if model.hasUpdater(game) { Button("Update game") { model.play(game, update: true) }.disabled(phase != nil) }
             Button("Diagnose…") { model.diagnose(game) }.disabled(phase != nil)
             Button("Uninstall…", role: .destructive) { model.askUninstall(game) }.disabled(phase != nil)
         }
@@ -301,7 +303,7 @@ struct GameCard: View {
         } else if unsupported {
             Text("Can't run on macOS").font(.caption).foregroundStyle(.red)
         } else if let phase {
-            if phase == "Playing" {
+            if phase == "Playing" || phase == "Updating" {
                 Button("Stop", role: .destructive) { model.stop(game) }
             } else {
                 ProgressView().controlSize(.small)

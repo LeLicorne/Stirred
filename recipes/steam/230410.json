@@ -15,5 +15,13 @@
   "-fullscreen:0",
   "-registry:Steam"
  ],
- "notes": "Verified 2026-11-07 on M4 16 GB: in-game, ~90 FPS steady on LOW graphics, ~37 FPS on MEDIUM. Started directly in DX11 via DXVK-macOS (its launcher renders blank under Wine). The game first demanded an update: run Scripts/setup-warframe-launcher.sh then `stirredctl run warframe --via-steam` once so the launcher updates, close it, then play with the direct launch."
+ "updater": {
+  "executable": "Tools/Launcher.exe",
+  "disabled_dlls": [
+   "d3dcompiler_47",
+   "d3dcompiler_46",
+   "d3dcompiler_43"
+  ]
+ },
+ "notes": "Verified 2026-11-07 on M4 16 GB: in-game, ~90 FPS steady on LOW graphics, ~37 FPS on MEDIUM. Started directly in DX11 via DXVK-macOS (its launcher renders blank under Wine). When the game demands an update, use Update game (or `stirredctl update warframe`): it prepares the launcher for Wine and runs it through Steam; close it when done, then play as usual."
 }

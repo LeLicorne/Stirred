@@ -19,6 +19,20 @@ public enum LaunchMode: String, Codable, Sendable {
 }
 
 /// Per-game compatibility knowledge. Stored as `recipes/steam/<appid>.json` in the repository.
+/// A game's own updater (e.g. Warframe's launcher), run through Steam. Wine needs it prepared: DXVK provides the Direct3D 11
+/// its hardware check wants, while the Direct3D shader compiler is switched off for that one program (its Chromium page
+/// stays blank otherwise).
+public struct GameUpdater: Codable, Sendable, Equatable {
+    /// Path of the updater inside the game's folder, e.g. `Tools/Launcher.exe`.
+    public var executable: String
+    /// DLLs disabled for the updater only.
+    public var disabledDlls: [String]?
+
+    public init(executable: String, disabledDlls: [String]? = nil) {
+        self.executable = executable; self.disabledDlls = disabledDlls
+    }
+}
+
 public struct Recipe: Codable, Sendable, Equatable {
     public var appid: Int
     public var name: String
@@ -37,13 +51,17 @@ public struct Recipe: Codable, Sendable, Equatable {
     /// The preset suggested for this game (the user's own choice, saved as a personal setting, wins).
     public var preset: QualityPreset?
     public var notes: String?
+    /// When set, Stirred offers an "Update game" action that runs the game's own updater.
+    public var updater: GameUpdater?
 
     public init(
         appid: Int, name: String, status: CompatStatus, verified: Bool = false,
         blockers: [String]? = nil, graphics: GraphicsBackend? = nil,
         env: [String: String]? = nil, dllOverrides: [String: String]? = nil,
-        launchArgs: [String]? = nil, latency: LatencyProfile? = nil, launchMode: LaunchMode? = nil, dxvkOptions: [String: String]? = nil, preset: QualityPreset? = nil, notes: String? = nil
+        launchArgs: [String]? = nil, latency: LatencyProfile? = nil, launchMode: LaunchMode? = nil, dxvkOptions: [String: String]? = nil, preset: QualityPreset? = nil, notes: String? = nil,
+        updater: GameUpdater? = nil
     ) {
+        self.updater = updater
         self.appid = appid; self.name = name; self.status = status; self.verified = verified
         self.blockers = blockers; self.graphics = graphics; self.env = env
         self.dllOverrides = dllOverrides; self.launchArgs = launchArgs; self.latency = latency; self.launchMode = launchMode; self.dxvkOptions = dxvkOptions; self.preset = preset; self.notes = notes
