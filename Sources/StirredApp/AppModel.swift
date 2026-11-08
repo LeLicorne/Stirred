@@ -30,6 +30,8 @@ final class AppModel {
     var setupError: String?
     /// Set when the user opened Steam by hand: then Stirred never closes it for them.
     private var userOpenedSteam = false
+    /// The uninstall waiting for the user's confirmation.
+    var pendingUninstall: UninstallPlan?
     private var started = false
 
     /// Settings key shared with the toggle in the Library toolbar. Default: close Steam after playing.
@@ -111,6 +113,39 @@ final class AppModel {
                 }
                 await launcher.cleanUpAfterGame(game, startedSteam: recorder.record.startedSteam ?? false,
                                                 keepSteam: keep, otherGamesRunning: others)
+            } catch {
+                await MainActor.run { self?.message = "\(error)" }
+            }
+            await MainActor.run { self?.phases[game.id] = nil }
+            await self?.refresh()
+        }
+    }
+
+    /// Step 1: work out what would be deleted, then let the user confirm.
+    func askUninstall(_ game: Game) {
+        guard phases[game.id] == nil else { return }
+        let launcher = self.launcher
+        Task.detached { [weak self] in
+            do {
+                let plan = try launcher.uninstallPlan(for: game)
+                await MainActor.run { self?.pendingUninstall = plan }
+            } catch {
+                await MainActor.run { self?.message = "\(error)" }
+            }
+        }
+    }
+
+    /// Step 2: the user confirmed.
+    func confirmUninstall(_ plan: UninstallPlan) {
+        let game = plan.game
+        guard phases[game.id] == nil else { return }
+        pendingUninstall = nil
+        message = nil
+        phases[game.id] = "Uninstalling…"
+        let launcher = self.launcher
+        Task.detached { [weak self] in
+            do {
+                try await launcher.uninstall(game) { phase in Task { @MainActor in self?.phases[game.id] = phase } }
             } catch {
                 await MainActor.run { self?.message = "\(error)" }
             }

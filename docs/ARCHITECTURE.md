@@ -50,6 +50,13 @@ logs/                         steam-client.log (rotated at 20 MB), dxvk/, sessio
 6. Clean-up: processes left in the game's folder are killed (`stopGame`); if Stirred started Steam for this session and the user did not
    open it by hand, Steam is shut down gracefully (`steam.exe -shutdown`, so cloud saves finish syncing), then anything left is killed.
 
+## Uninstall
+
+`Uninstall.swift` does what Steam's "Delete local content" does, without Steam's dialog: it deletes `steamapps/common/<folder>`, the shader
+cache / downloading / temp / workshop leftovers for the app id, and `appmanifest_<id>.acf` (last, so a half-finished delete still shows the
+game). Safety: the folder must resolve (symlinks followed) to exactly one level under `steamapps/common`, the app id must be numeric, and a
+running game blocks it. Steam is closed first because it would keep believing the game is installed.
+
 ## The Steam display fix
 
 Under Wine 11 the Chromium behind Steam's UI paints a black window. `steamwebhelper.exe` is replaced by a tiny wrapper

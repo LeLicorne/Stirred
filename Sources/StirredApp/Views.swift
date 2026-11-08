@@ -161,6 +161,18 @@ struct LibraryView: View {
             .padding(24)
         }
         .navigationTitle("Library")
+        .confirmationDialog(
+            "Uninstall \(model.pendingUninstall?.game.name ?? "")?",
+            isPresented: Binding(get: { model.pendingUninstall != nil }, set: { if !$0 { model.pendingUninstall = nil } }),
+            titleVisibility: .visible, presenting: model.pendingUninstall
+        ) { plan in
+            Button("Uninstall (\(ByteCountFormatter.string(fromByteCount: plan.bytes, countStyle: .file)))", role: .destructive) {
+                model.confirmUninstall(plan)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { plan in
+            Text("This deletes the game's files (\(ByteCountFormatter.string(fromByteCount: plan.bytes, countStyle: .file))) from this Mac. Your Steam Cloud saves are kept. Steam is closed first and starts again the next time you press Play.")
+        }
         .toolbar {
             ToolbarItem {
                 Toggle(isOn: $closeSteam) { Label("Close Steam after playing", systemImage: "power") }
@@ -223,6 +235,12 @@ struct GameCard: View {
                     Spacer(minLength: 8)
                     Text(badge.text).font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 3)
                         .background(badge.color.opacity(0.25), in: Capsule())
+                    Menu {
+                        Button("Uninstall…", role: .destructive) { model.askUninstall(game) }
+                    } label: { Image(systemName: "ellipsis.circle") }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                    .disabled(phase != nil)
+                    .help("More actions")
                 }
                 // Fixed height so every card has the same size, with or without notes.
                 Text(recipe?.notes ?? "No notes yet. Play it once and Stirred will record how it ran.")
@@ -246,6 +264,9 @@ struct GameCard: View {
         }
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .contextMenu {
+            Button("Uninstall…", role: .destructive) { model.askUninstall(game) }.disabled(phase != nil)
+        }
     }
 
     @ViewBuilder private var action: some View {

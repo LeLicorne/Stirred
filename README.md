@@ -44,6 +44,8 @@ Free, open source (GPL-3), built only from open-source components.
    Steam updates itself once (a few minutes).
 2. A Steam window opens: **sign in once** (tick "remember me" so later starts need no window).
 3. Install games from that Steam window (or `stirredctl install <appid>`); they appear in the Library.
+   To remove one, use the **…** menu on its card (or right-click it) > **Uninstall…**: Stirred shows how much it will delete, asks to
+   confirm, closes Steam, and deletes the game's files. Your Steam Cloud saves are kept. CLI: `stirredctl uninstall <game> --yes`.
 4. Press **Play**. Always start games from Stirred, not from Steam's own window: only Stirred applies the graphics fixes.
 
 ## Games tested (Apple M4, 16 GB, macOS 27)

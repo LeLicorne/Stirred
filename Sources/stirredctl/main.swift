@@ -47,7 +47,7 @@ func printPlan(_ plan: LaunchPlan) {
 
 func run() async throws {
     guard let command = args.first else {
-        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|library|plan <game>|run <game> [--watch] [--keep-steam] [--latency P] [--hud] [--async]|report [dir]>")
+        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|uninstall <game> [--yes]|library|plan <game>|run <game> [--watch] [--keep-steam] [--latency P] [--hud] [--async]|report [dir]>")
         print("<game> is an appid or part of the name, e.g. `stirredctl run muck --watch`")
         return
     }
@@ -83,6 +83,20 @@ func run() async throws {
         guard launcher.steamState() == .ready else { fail("Steam is not ready: start it first (`stirredctl steam`) and log in.") }
         try launcher.requestInstall(appID: id)
         print("Steam should now show an install dialog for app \(id): accept it there.")
+    case "uninstall":
+        // Shows what would be deleted; nothing is removed without --yes.
+        guard args.count > 1 else { fail("usage: stirredctl uninstall <game> [--yes]") }
+        let game = try findGame(args[1])
+        let plan = try launcher.uninstallPlan(for: game)
+        let size = ByteCountFormatter.string(fromByteCount: plan.bytes, countStyle: .file)
+        print("Would delete \(size) for \(game.name):")
+        for url in plan.paths { print("  \(url.path)") }
+        if args.contains("--yes") {
+            let freed = try await launcher.uninstall(game) { print($0) }
+            print("Uninstalled \(game.name), freed \(ByteCountFormatter.string(fromByteCount: freed, countStyle: .file)).")
+        } else {
+            print("Run again with --yes to delete.")
+        }
     case "quit":
         await launcher.quitSteam()
         print("Steam stopped")

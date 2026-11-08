@@ -594,3 +594,59 @@ struct SteamLifecycleTests {
         #expect(round.startedSteam == true)
     }
 }
+
+@Suite("Uninstall")
+struct UninstallTests {
+    private func tree() throws -> (root: URL, game: Game) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-un-\(UUID().uuidString)")
+        let steamapps = root.appendingPathComponent("steamapps")
+        let folder = steamapps.appendingPathComponent("common/Muck")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data(count: 1000).write(to: folder.appendingPathComponent("a.bin"))
+        try Data(count: 500).write(to: folder.appendingPathComponent("b.bin"))
+        try Data(count: 10).write(to: steamapps.appendingPathComponent("appmanifest_7.acf"))
+        try FileManager.default.createDirectory(at: steamapps.appendingPathComponent("shadercache/7"), withIntermediateDirectories: true)
+        try Data(count: 90).write(to: steamapps.appendingPathComponent("shadercache/7/x"))
+        return (root, Game(store: "steam", storeID: "7", name: "Muck", installDirectory: folder))
+    }
+
+    @Test func planListsFolderCachesAndManifestWithTheirSize() throws {
+        let (root, game) = try tree(); defer { try? FileManager.default.removeItem(at: root) }
+        let plan = try Uninstaller.plan(for: game, steamRoot: root)
+        #expect(plan.bytes == 1600)
+        #expect(plan.paths.count == 3)
+        #expect(plan.paths.last?.lastPathComponent == "appmanifest_7.acf")
+    }
+
+    @Test func executeRemovesEverythingButLeavesOtherGames() throws {
+        let (root, game) = try tree(); defer { try? FileManager.default.removeItem(at: root) }
+        let other = root.appendingPathComponent("steamapps/common/Other")
+        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+        try Uninstaller.execute(try Uninstaller.plan(for: game, steamRoot: root))
+        #expect(!FileManager.default.fileExists(atPath: game.installDirectory!.path))
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("steamapps/appmanifest_7.acf").path))
+        #expect(FileManager.default.fileExists(atPath: other.path))
+    }
+
+    @Test func refusesFoldersOutsideCommonAndSymlinkEscapes() throws {
+        let (root, _) = try tree(); defer { try? FileManager.default.removeItem(at: root) }
+        let escape = Game(store: "steam", storeID: "7", name: "X",
+                          installDirectory: root.appendingPathComponent("steamapps/common/../.."))
+        #expect(throws: UninstallError.self) { try Uninstaller.plan(for: escape, steamRoot: root) }
+        let common = root.appendingPathComponent("steamapps/common")
+        #expect(throws: UninstallError.self) {   // the whole "common" folder is not a single game
+            try Uninstaller.plan(for: Game(store: "steam", storeID: "7", name: "X", installDirectory: common), steamRoot: root)
+        }
+        let outside = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-outside-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let link = common.appendingPathComponent("Link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
+        #expect(throws: UninstallError.self) {
+            try Uninstaller.plan(for: Game(store: "steam", storeID: "7", name: "X", installDirectory: link), steamRoot: root)
+        }
+        #expect(throws: UninstallError.self) {   // not a numeric Steam app id
+            try Uninstaller.plan(for: Game(store: "steam", storeID: "../7", name: "X", installDirectory: common.appendingPathComponent("Muck")), steamRoot: root)
+        }
+    }
+}
