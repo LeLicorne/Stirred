@@ -85,3 +85,7 @@ Rosetta 2 is to be reduced after macOS 27 (check Apple's current notes). Stirred
 - Checked 2026-11-08: the couch view renders full screen and centered (screenshot); the selection logic is unit-tested. Not checked: a real controller (none connected), key presses (macOS refused synthetic keystrokes), the menu bar menu clicks.
 - Controller events reach Stirred only while it is the front app. In a game the controller belongs to the game (Wine passes it through); Steam Input remapping is not supported.
 - Only the couch view is controller-driven; the rest of the app needs mouse or keyboard.
+
+## Black 3D scene on Unreal / some Unity games (RV There Yet?, Orcs Must Die 3)
+- Symptom: menus and HUD draw, the 3D world is black. Logs show `[mvk-error] Render pipeline compile failed ... Fragment input(s) user(locn2) mismatching vertex shader output` for a pipeline with a geometry shader (MoltenVK has no geometry shaders; DXVK-macOS 1.10 skips them, so the fragment shader misses its inputs). DXVK also reports `shaderStorageImageExtendedFormats: 0`, which Unreal's post-processing needs.
+- Tried: forcing DirectX 11 (`-dx11`, makes the game start), `-FeatureLevelES31` (game exits at start-up). Nothing left to try with DXVK 1.10 on this stack; a fix would need MoltenVK or DXVK changes upstream.

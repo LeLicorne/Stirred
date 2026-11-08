@@ -1,12 +1,12 @@
 {
  "appid": 3949040,
  "name": "RV There Yet?",
- "status": "experimental",
+ "status": "unsupported",
  "verified": false,
  "graphics": "dxvk",
  "latency": "low",
  "launch_args": [
   "-dx11"
  ],
- "notes": "Unreal Engine 5. By default the game picks DirectX 12, which fails under Wine ('A D3D11-compatible GPU (Feature Level 11.0, Shader Model 5.0) is required'). Forced to DirectX 11 through DXVK-macOS with -dx11 (2026-11-08, M4 16 GB): the game starts, loads the map and shows the world, then crashed about 15 s later (EXCEPTION_ACCESS_VIOLATION writing address 0, no symbols). Not playable yet. Multiplayer (Epic Online Services) untested: the log says no online services are present."
+ "notes": "Unreal Engine 5. By default the game picks DirectX 12, which fails under Wine. Forced to DirectX 11 through DXVK-macOS with -dx11 (2026-11-08, M4 16 GB): the menu and HUD draw but the 3D scene stays black, and one session crashed about 15 s after loading the map. The log shows the same MoltenVK error as Orcs Must Die 3: a draw using a geometry shader fails ('Fragment input(s) user(locn2) mismatching vertex shader output'), and Metal also lacks the typed storage image formats Unreal's post-processing uses. -FeatureLevelES31 makes the game exit at start-up. These are limits of MoltenVK, not something a recipe can switch off. Multiplayer (Epic Online Services) untested."
 }
