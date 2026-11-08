@@ -1071,3 +1071,58 @@ struct PresetTests {
         #expect(Recipe(appid: 1, name: "X", status: .playable).updater == nil)
     }
 }
+
+@Suite struct CommunityRecipeTests {
+    private func json(_ body: String) -> Data { Data(body.utf8) }
+    private let system = SystemInfo(macOS: "27.0", chip: "Apple M4", memoryGB: 16, lowPowerMode: false, onBattery: false)
+
+    @Test func acceptsASafeRecipeAndNeverTrustsItsVerifiedFlag() throws {
+        let recipe = try CommunityRecipes.parse(json(#"{"appid": 42, "name": "G", "status": "playable", "verified": true, "graphics": "dxvk", "launch_args": ["-windowed"], "env": {"DXVK_HUD": "fps"}, "dxvk_options": {"dxgi.maxFrameRate": "60"}}"#))
+        #expect(recipe.verified == false)
+        #expect(recipe.notes?.contains("not verified") == true)
+        #expect(recipe.launchArgs == ["-windowed"])
+    }
+
+    @Test func refusesDangerousEnvironmentVariables() {
+        #expect(throws: CommunityRecipes.ImportError.self) {
+            try CommunityRecipes.parse(json(#"{"appid": 42, "name": "G", "status": "playable", "env": {"DYLD_INSERT_LIBRARIES": "/tmp/x.dylib"}}"#))
+        }
+    }
+
+    @Test func refusesUpdaterOutsideTheGameFolderAndUnknownOptions() {
+        #expect(!CommunityRecipes.problems(in: Recipe(appid: 1, name: "G", status: .playable, updater: GameUpdater(executable: "../../evil.exe"))).isEmpty)
+        #expect(!CommunityRecipes.problems(in: Recipe(appid: 1, name: "G", status: .playable, updater: GameUpdater(executable: "/bin/sh"))).isEmpty)
+        #expect(!CommunityRecipes.problems(in: Recipe(appid: 1, name: "G", status: .playable, dxvkOptions: ["evil.key": "1"])).isEmpty)
+        #expect(!CommunityRecipes.problems(in: Recipe(appid: 1, name: "G", status: .playable, dllOverrides: ["d3d11": "$(rm -rf)"])).isEmpty)
+        #expect(CommunityRecipes.problems(in: Recipe(appid: 1, name: "G", status: .playable, updater: GameUpdater(executable: "Tools/Launcher.exe"))).isEmpty)
+    }
+
+    @Test func refusesGarbageAndHugeFiles() {
+        #expect(throws: CommunityRecipes.ImportError.self) { try CommunityRecipes.parse(json("not json")) }
+        #expect(throws: CommunityRecipes.ImportError.self) { try CommunityRecipes.parse(Data(count: CommunityRecipes.maxBytes + 1)) }
+    }
+
+    @Test func exportRoundTripsAndRecordsTheTestOnlyWhenClaimed() throws {
+        let recipe = Recipe(appid: 42, name: "G", status: .playable, launchArgs: ["-windowed"], latency: .low)
+        let untested = try CommunityRecipes.parse(CommunityRecipes.export(recipe, tested: false, system: system, engine: "wine-1"))
+        #expect(untested.launchArgs == ["-windowed"] && untested.latency == .low)
+        let data = try CommunityRecipes.export(recipe, tested: true, system: system, engine: "wine-1", date: Date(timeIntervalSince1970: 0))
+        let text = String(decoding: data, as: UTF8.self)
+        #expect(text.contains("\"verified\" : true") && text.contains("Apple M4 16 GB") && text.contains("1970-01-01"))
+        #expect(!text.contains("baptiste") && !text.contains("/Users"))
+    }
+
+    @Test func importedRecipeWinsOverBundledAndCanBeRemoved() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-community-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bundled = root.appendingPathComponent("bundled/steam"); try FileManager.default.createDirectory(at: bundled, withIntermediateDirectories: true)
+        try Data(#"{"appid": 7, "name": "Bundled", "status": "unsupported", "verified": false}"#.utf8).write(to: bundled.appendingPathComponent("7.json"))
+        let repo = RecipeRepository(directory: root.appendingPathComponent("bundled"), userDirectory: root.appendingPathComponent("user"))
+        #expect(repo.recipe(forSteamAppID: 7)?.name == "Bundled")
+        try repo.saveImported(try CommunityRecipes.parse(json(#"{"appid": 7, "name": "Imported", "status": "playable"}"#)))
+        #expect(repo.recipe(forSteamAppID: 7)?.name == "Imported")
+        #expect(repo.importedAppIDs() == [7])
+        try repo.removeImported(7)
+        #expect(repo.recipe(forSteamAppID: 7)?.name == "Bundled")
+    }
+}

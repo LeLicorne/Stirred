@@ -70,12 +70,15 @@ public struct Recipe: Codable, Sendable, Equatable {
 
 public struct RecipeRepository: Sendable {
     public let directory: URL
+    /// Recipes the user imported (they win over the bundled ones).
+    public let userDirectory: URL?
 
-    public init(directory: URL) {
-        self.directory = directory
+    public init(directory: URL, userDirectory: URL? = nil) {
+        self.directory = directory; self.userDirectory = userDirectory
     }
 
     public func recipe(forSteamAppID appID: Int) -> Recipe? {
+        if let imported = importedRecipe(forSteamAppID: appID) { return imported }
         let url = directory.appendingPathComponent("steam/\(appID).json")
         guard let data = try? Data(contentsOf: url) else { return nil }
         let decoder = JSONDecoder()

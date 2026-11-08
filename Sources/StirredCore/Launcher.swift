@@ -29,7 +29,7 @@ public struct Launcher: Sendable {
         resourcesDirectory: URL = Launcher.defaultResourcesDirectory()
     ) {
         self.paths = paths
-        self.recipes = RecipeRepository(directory: recipesDirectory)
+        self.recipes = RecipeRepository(directory: recipesDirectory, userDirectory: paths.root.appendingPathComponent("recipes", isDirectory: true))
         self.resourcesDirectory = resourcesDirectory
     }
 

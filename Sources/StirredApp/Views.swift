@@ -191,6 +191,10 @@ struct LibraryView: View {
                     .help("Stirred closes the Steam it started once your game ends (not if you opened Steam yourself)")
             }
             ToolbarItem {
+                Button { model.importRecipeFile() } label: { Label("Import recipe…", systemImage: "square.and.arrow.down") }
+                    .help("Import a recipe file someone shared (checked first, never marked verified)")
+            }
+            ToolbarItem {
                 Toggle(isOn: Bindable(model).showHUD) { Label("FPS overlay", systemImage: "speedometer") }
                     .toggleStyle(.button)
                     .help("Show FPS and frame times inside the game (next launch)")
@@ -252,6 +256,7 @@ struct GameCard: View {
                     Menu {
                         if model.hasUpdater(game) { Button("Update game") { model.play(game, update: true) } }
                         Button("Diagnose…") { model.diagnose(game) }
+                        Button("Copy recipe to share") { model.copyRecipe(game) }
                         Divider()
                         Button("Uninstall…", role: .destructive) { model.askUninstall(game) }
                     } label: { Image(systemName: "ellipsis.circle") }

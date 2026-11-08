@@ -209,6 +209,29 @@ func run() async throws {
         await recorder.watch(maxSeconds: intOption("--seconds", default: 3600), onEvent: { print($0) })
         _ = try? launcher.finish(&recorder)
         await launcher.cleanUpAfterGame(game, startedSteam: recorder.record.startedSteam ?? false, keepSteam: args.contains("--keep-steam"), otherGamesRunning: false)
+    case "recipe":
+        let sub = args.count > 1 ? args[1] : ""
+        switch sub {
+        case "export":
+            guard args.count > 2 else { fail("usage: stirredctl recipe export <game> [--tested]") }
+            let game = try findGame(args[2])
+            let data = try launcher.exportRecipe(for: game, tested: args.contains("--tested"))
+            print(String(decoding: data, as: UTF8.self))
+        case "import":
+            guard args.count > 2 else { fail("usage: stirredctl recipe import <file.json>") }
+            let result = try launcher.importRecipe(from: try Data(contentsOf: URL(fileURLWithPath: args[2])))
+            print("\(result.replaced ? "Replaced" : "Imported") recipe for \(result.recipe.name) (\(result.recipe.appid)), status \(result.recipe.status.rawValue), not verified.")
+        case "list":
+            let ids = launcher.recipes.importedAppIDs()
+            if ids.isEmpty { print("No imported recipes.") }
+            for id in ids { print("\(id)  \(launcher.recipes.importedRecipe(forSteamAppID: id)?.name ?? "?")") }
+        case "remove":
+            guard args.count > 2 else { fail("usage: stirredctl recipe remove <game or appid>") }
+            let id = try Int(args[2]) ?? findGame(args[2]).steamAppID ?? 0
+            try launcher.recipes.removeImported(id)
+            print("Removed the imported recipe for \(id) (the bundled one, if any, applies again).")
+        default: fail("usage: stirredctl recipe export|import|list|remove")
+        }
     case "report":
         let dir = args.count > 1 ? URL(fileURLWithPath: args[1])
             : SessionRecorder.sessionsDirectory(launcher.paths).appendingPathComponent("latest").resolvingSymlinksInPath()

@@ -1,3 +1,4 @@
+import UniformTypeIdentifiers
 import SwiftUI
 import StirredCore
 
@@ -131,6 +132,29 @@ final class AppModel {
     }
 
     func recipe(for game: Game) -> Recipe? { launcher.recipe(for: game) }
+
+    /// Copies the game's recipe (bundled or imported, plus personal settings) so it can be shared. Nothing is uploaded.
+    func copyRecipe(_ game: Game) {
+        do {
+            let data = try launcher.exportRecipe(for: game, tested: false)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(String(decoding: data, as: UTF8.self), forType: .string)
+            message = "Recipe for \(game.name) copied. Paste it in a file or send it to someone; to add it to the project, open a pull request with it."
+        } catch { message = "\(error)" }
+    }
+
+    /// Asks for a recipe file and imports it (checked first: only graphics settings, launch arguments and harmless variables).
+    func importRecipeFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]; panel.allowsMultipleSelection = false
+        panel.message = "Choose a Stirred recipe (.json). Imported recipes are never marked as verified."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let result = try launcher.importRecipe(from: try Data(contentsOf: url))
+            message = "\(result.replaced ? "Replaced" : "Imported") the recipe for \(result.recipe.name). It applies at the next launch."
+            presetRevision += 1
+        } catch { message = "\(error)" }
+    }
 
     func hasUpdater(_ game: Game) -> Bool { launcher.updater(for: game) != nil }
 
