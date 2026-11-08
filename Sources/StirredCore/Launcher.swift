@@ -150,6 +150,16 @@ public struct Launcher: Sendable {
         return line.contains("[Logged On")
     }
 
+    /// Chromium helpers left behind when Steam was closed from its own window or crashed (nothing else would stop them).
+    /// Only call when Steam is known to be stopped. Returns true if something was killed.
+    @discardableResult
+    public func reapOrphans() -> Bool {
+        let before = SystemSampler.run("/bin/ps", ["-Ao", "command"]).lowercased()
+        guard before.contains("steamwebhelper") else { return false }
+        _ = SystemSampler.run("/usr/bin/pkill", ["-9", "-f", #"steamwebhelper(_real)?\.exe"#])
+        return true
+    }
+
     /// `since`: ignore a "Logged On" written before that moment (stale line from an earlier Steam session).
     public func steamState(since: Date = .distantPast) -> SteamState {
         guard Self.isSteamClientRunning(psOutput: SystemSampler.run("/bin/ps", ["-Ao", "command"])) else { return .stopped }

@@ -84,6 +84,7 @@ final class AppModel {
             let engine = try? launcher.engine()
             let games = (try? launcher.installedGames()) ?? []
             let steam = engine == nil ? SteamState.stopped : launcher.steamState()
+            if steam == .stopped { launcher.reapOrphans() }
             let sessions = launcher.sessionDirectories().prefix(40).compactMap { dir -> SessionSummary? in
                 guard let r = try? SessionRecorder.load(dir) else { return nil }
                 let crashed = (try? String(contentsOf: dir.appendingPathComponent("report.md"), encoding: .utf8))?
