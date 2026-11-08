@@ -78,3 +78,10 @@ Rosetta 2 is to be reduced after macOS 27 (check Apple's current notes). Stirred
 - Switching saves the prefix's registry and Windows system files with APFS cloning (not games, not Steam), closes Steam, runs `cmd /c echo` with the new engine and goes back by itself if that fails. The check is small: a game that breaks on the new Wine is not caught; use "Go back" then.
 - Checked 2026-11-08 with a second copy of Wine 11.21 posing as 11.22: install, switch, rollback, then Muck started without crash. A really different Wine version has not been tried; no newer build exists yet.
 - DXVK and MoltenVK are not updated this way (DXVK 2.x does not work on this stack anyway).
+
+## Menu bar, couch mode, controller
+- Menu bar icon: Steam state, Play/Stop per game, Couch mode, Close Steam, Open Stirred, Quit. Closing the window leaves Stirred in the menu bar.
+- Couch mode (toolbar "tv" button or menu bar): full screen, one row of covers. Keys: arrows, Return (play), S (stop), Esc (leave). Controller: D-pad or left stick, A play, Y stop, B leave.
+- Checked 2026-11-08: the couch view renders full screen and centered (screenshot); the selection logic is unit-tested. Not checked: a real controller (none connected), key presses (macOS refused synthetic keystrokes), the menu bar menu clicks.
+- Controller events reach Stirred only while it is the front app. In a game the controller belongs to the game (Wine passes it through); Steam Input remapping is not supported.
+- Only the couch view is controller-driven; the rest of the app needs mouse or keyboard.

@@ -11,11 +11,21 @@ struct StirredApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("Stirred") {
+        WindowGroup("Stirred", id: "main") {
             ContentView()
                 .environment(model)
                 .frame(minWidth: 960, minHeight: 640)
-                .task { model.start() }
+                .task {
+                    model.start()
+                    // `open Stirred.app --args -couch YES` opens couch mode (handy for screenshots).
+                    if UserDefaults.standard.bool(forKey: "couch") {
+                        try? await Task.sleep(nanoseconds: 4_000_000_000)
+                        model.couchMode = true
+                    }
+                }
+        }
+        MenuBarExtra("Stirred", systemImage: "gamecontroller.fill") {
+            MenuBarContent().environment(model)
         }
     }
 }

@@ -69,6 +69,7 @@ final class AppModel {
     /// The uninstall waiting for the user's confirmation.
     var pendingUninstall: UninstallPlan?
     private var started = false
+    var couchMode = false
 
     /// Settings key shared with the toggle in the Library toolbar. Default: close Steam after playing.
     var closeSteamAfterPlaying: Bool { UserDefaults.standard.object(forKey: "closeSteamAfterPlaying") as? Bool ?? true }

@@ -1287,3 +1287,36 @@ struct PresetTests {
         #expect(catalog.releases.contains { $0.name == standard.engineName && $0.sha256 == standard.wineSHA256 && $0.url == standard.wineURL })
     }
 }
+
+@Suite struct CouchNavigationTests {
+    @Test func movesAndStopsAtTheEnds() {
+        var s = CouchSelection(count: 3)
+        #expect(s.apply(.left) == .none && s.index == 0)
+        _ = s.apply(.right); _ = s.apply(.right); _ = s.apply(.right)
+        #expect(s.index == 2)
+        #expect(s.apply(.select) == .play(2))
+        #expect(s.apply(.stop) == .stop(2))
+        #expect(s.apply(.back) == .exit)
+    }
+
+    @Test func emptyLibraryDoesNothingButExit() {
+        var s = CouchSelection(count: 0)
+        #expect(s.apply(.select) == .none && s.apply(.right) == .none && s.apply(.stop) == .none)
+        #expect(s.apply(.back) == .exit)
+    }
+
+    @Test func highlightStaysValidWhenTheListShrinks() {
+        var s = CouchSelection(count: 5, index: 4)
+        s.update(count: 2)
+        #expect(s.index == 1)
+        s.update(count: 0)
+        #expect(s.index == 0)
+    }
+
+    @Test func stickNeedsAClearHorizontalPush() {
+        #expect(StickMapper.event(x: -0.9, y: 0.1) == .left)
+        #expect(StickMapper.event(x: 0.8, y: -0.2) == .right)
+        #expect(StickMapper.event(x: 0.3, y: 0) == nil)
+        #expect(StickMapper.event(x: 0.7, y: 0.9) == nil)
+    }
+}

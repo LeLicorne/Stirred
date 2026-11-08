@@ -19,7 +19,10 @@ struct ContentView: View {
         switch model.setupComplete {
         case nil: ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         case false?: SetupView()
-        case true?: mainView
+        case true?: ZStack {
+                mainView.toolbar(model.couchMode ? .hidden : .automatic, for: .windowToolbar)
+                if model.couchMode { CouchView().ignoresSafeArea() }
+            }
         }
     }
 
@@ -197,6 +200,10 @@ struct LibraryView: View {
                 Toggle(isOn: $closeSteam) { Label("Close Steam after playing", systemImage: "power") }
                     .toggleStyle(.button)
                     .help("Stirred closes the Steam it started once your game ends (not if you opened Steam yourself)")
+            }
+            ToolbarItem {
+                Button { model.couchMode = true } label: { Label("Couch mode", systemImage: "tv") }
+                    .help("Full-screen game picker for keyboard or controller")
             }
             ToolbarItem {
                 Button { model.importRecipeFile() } label: { Label("Import recipe…", systemImage: "square.and.arrow.down") }

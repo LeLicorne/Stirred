@@ -15,7 +15,7 @@ Ideas ordered from most to least valuable (product/UX view). Status: **Done**, *
 | 9 | Other stores (GOG first, then Epic via Legendary) | Queued | Plug into `GameStoreProvider`; one store at a time, each is fragile |
 | 10 | Disk management: size per game, move to an external disk, low-space alert | Done | Disk section (free space, what Stirred uses, safe cleanup), low-space banner, move a game to another disk and back (`stirredctl disk`, `stirredctl move`) |
 | 11 | Auto-update of engine and components with rollback | Done (engine) | Tested engines are listed in `Resources/engines.json` (SHA-256 pinned). One-click install and switch with prefix snapshot, start-up check and automatic rollback; manual rollback; online check for newer upstream builds (information only). Not done: DXVK/MoltenVK updates, silent automatic switching |
-| 12 | Controller navigation, full screen, menu-bar mode | Queued | |
+| 12 | Controller navigation, full screen, menu-bar mode | Done (basic) | Menu bar icon (play/stop, close Steam, open window), full-screen couch mode with keyboard and controller (GameController). Not done: controller navigation of the whole app, Steam Input |
 
 ## Distribution
 Notarization (99 EUR/year) removes the "Open Anyway" step, Sparkle gives app updates, a Homebrew cask eases install. All queued.
