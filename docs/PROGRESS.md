@@ -9,7 +9,7 @@ test with a secondary Steam account · downloads only from the sources listed in
 
 ## Works
 - App (Library, Activity, Logs, first-run setup) and CLI on a shared `Launcher`; 41+ unit tests.
-- Verified games: Muck, HoloCure, Warframe. See README and docs/KNOWN-ISSUES.md for numbers and workarounds.
+- Verified games: Muck, HoloCure, Warframe, For The King II. See README and docs/KNOWN-ISSUES.md for numbers and workarounds.
 - Session reports (CPU/GPU sampling, redacted logs, findings), latency profiles, power warnings, bounded logs.
 
 ## Not done / ideas, roughly by value

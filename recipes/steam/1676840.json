@@ -1,1 +1,12 @@
-{"appid":1676840,"name":"For The King II","status":"experimental","verified":false,"graphics":"dxvk","latency":"low","launch_args":["-force-d3d11"],"notes":"Unity 2022.3, 64-bit. Unity picks Vulkan by default, which shows missing texture tiles through MoltenVK: -force-d3d11 makes it use DirectX 11 through DXVK instead. Being tested."}
+{
+ "appid": 1676840,
+ "name": "For The King II",
+ "status": "playable",
+ "verified": true,
+ "graphics": "dxvk",
+ "latency": "low",
+ "launch_args": [
+  "-force-d3d11"
+ ],
+ "notes": "Unity 2022.3, 64-bit. Verified 2026-11-08: textures complete once forced to DirectX 11 (DXVK) with -force-d3d11. By default Unity picks Vulkan, which shows missing texture tiles through MoltenVK. Launch it from Stirred."
+}

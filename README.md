@@ -52,6 +52,7 @@ Free, open source (GPL-3), built only from open-source components.
 | HoloCure | Playable |
 | Warframe | Playable: ~90 FPS on low graphics, ~37 FPS on medium. Needs a one-time launcher update, see [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md) |
 | Trackmania | Does not start (Ubisoft Connect hangs under Wine) |
+| For The King II | Playable (needs DirectX 11 forced, which Stirred does automatically for Unity games) |
 | Cat Purrtrol: Find All 100! | Crashes at startup (32-bit Unity) |
 
 Games protected by kernel anti-cheat (Easy Anti-Cheat, BattlEye, Vanguard...) cannot run on macOS and Stirred does not
