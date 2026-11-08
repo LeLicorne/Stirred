@@ -5,7 +5,7 @@ Ideas ordered from most to least valuable (product/UX view). Status: **Done**, *
 | # | Idea | Status | Notes |
 |---|---|---|---|
 | 1 | **"Will it run?" before installing** (verdict from our tests, anti-cheat registry, DirectX version, Steam Deck status) | **Done** | "Check a game" tab and `stirredctl check`. Grow the anti-cheat registry in `recipes/steam/`. Deck status is a hint, not a promise |
-| 2 | Whole owned library ranked by compatibility ("120 of your 400 games run") | Queued | Needs the list of owned games (Steam Web API key or a public profile). Reuses the verdict engine |
+| 2 | **Whole owned library ranked by compatibility** | **Done** | "All my games" tab and `stirredctl owned`. Owned games come from Steam's own cache files (`packageinfo.vdf` + `appinfo.vdf`): no API key, no network, instant. Store details (DirectX 12, anti-cheat, launchers) are then fetched slowly in the background and cached on disk |
 | 3 | **"It doesn't work" diagnosis** with a suggested fix | Partly | Session reports already add advice (Unity on Vulkan, anti-cheat, DXMT) and "Copy report" exists. Missing: one button that diagnoses the last launch and applies the fix |
 | 4 | **Install from Stirred** with progress | **Done** | Install in "Check a game"; download progress and size on Library cards; Steam closes after the download if Stirred started it. Steam still shows its own "Install" window to accept |
 | 5 | Per-game presets Performance / Balanced / Quality | Queued | Needs per-engine settings in recipes (Unity arguments, Unreal `Engine.ini`) and expected FPS on 16 GB |

@@ -10,6 +10,7 @@ test with a secondary Steam account · downloads only from the sources listed in
 ## Works
 - App (Library, Activity, Logs, first-run setup) and CLI on a shared `Launcher`; 41+ unit tests.
 - Verified games: Muck, HoloCure, Warframe, For The King II. See README and docs/KNOWN-ISSUES.md for numbers and workarounds.
+- "All my games" (whole owned library ranked offline from Steam's cache files, refined from the store with a disk cache), "Check a game", install from Stirred, uninstall.
 - Session reports (CPU/GPU sampling, redacted logs, findings), latency profiles, power warnings, bounded logs.
 
 ## Not done / ideas, roughly by value (full ordered list in docs/ROADMAP.md)

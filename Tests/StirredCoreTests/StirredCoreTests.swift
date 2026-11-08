@@ -734,3 +734,122 @@ struct CheckGameExtraTests {
         #expect(StoreClient.bestMatch([], for: "x") == nil)
     }
 }
+
+// MARK: - Whole library
+
+private func cstr(_ s: String) -> [UInt8] { Array(s.utf8) + [0] }
+private func le32(_ v: UInt32) -> [UInt8] { withUnsafeBytes(of: v.littleEndian) { Array($0) } }
+private func le64(_ v: UInt64) -> [UInt8] { withUnsafeBytes(of: v.littleEndian) { Array($0) } }
+
+@Suite("Steam local data")
+struct SteamLocalDataTests {
+    /// packageinfo v40: package 5 owns apps 1625450 and 730.
+    private func packageInfo(version: UInt32 = 0x06565528) -> Data {
+        var d: [UInt8] = le32(version) + le32(1)
+        d += le32(5) + [UInt8](repeating: 0, count: 20) + le32(9) + (version & 0xFF >= 0x28 ? le64(0) : [])
+        d += [0] + cstr("5") + [0] + cstr("appids") + [2] + cstr("0") + le32(1625450) + [2] + cstr("1") + le32(730) + [8] + [8] + [8]
+        d += le32(0xFFFF_FFFF)
+        return Data(d)
+    }
+
+    /// appinfo v41 with a string table: Muck (windows+macos, Deck playable) and a DLC.
+    private func appInfo() -> Data {
+        let table = ["appinfo", "common", "name", "type", "oslist", "steam_deck_compatibility", "category"]
+        func idx(_ s: String) -> [UInt8] { le32(UInt32(table.firstIndex(of: s)!)) }
+        func app(_ id: UInt32, name: String, type: String, oslist: String, deck: UInt32?) -> [UInt8] {
+            var kv: [UInt8] = [0] + idx("appinfo") + [0] + idx("common")
+            kv += [1] + idx("name") + cstr(name) + [1] + idx("type") + cstr(type) + [1] + idx("oslist") + cstr(oslist)
+            if let deck { kv += [0] + idx("steam_deck_compatibility") + [2] + idx("category") + le32(deck) + [8] }
+            kv += [8] + [8] + [8]
+            let header = le32(0) + le32(0) + le64(0) + [UInt8](repeating: 0, count: 20) + le32(0) + [UInt8](repeating: 0, count: 20)
+            return le32(id) + le32(UInt32(header.count + kv.count)) + header + kv
+        }
+        var body = app(1625450, name: "Muck", type: "Game", oslist: "windows,macos,linux", deck: 2)
+        body += app(99, name: "Muck Soundtrack", type: "DLC", oslist: "windows", deck: nil)
+        body += le32(0)
+        let tableOffset = UInt64(16 + body.count)
+        var d: [UInt8] = le32(0x07564429) + le32(1) + le64(tableOffset) + body
+        d += le32(UInt32(table.count)); for s in table { d += cstr(s) }
+        return Data(d)
+    }
+
+    @Test func packageInfoListsOwnedApps() throws {
+        #expect(try PackageInfoReader.ownedAppIDs(packageInfo()) == [1625450, 730])
+        #expect(try PackageInfoReader.ownedAppIDs(packageInfo(version: 0x06565527)) == [1625450, 730])
+    }
+
+    @Test func appInfoGivesNamePlatformsAndDeckStatus() throws {
+        let entries = try AppInfoReader.read(appInfo())
+        let muck = try #require(entries[1625450])
+        #expect(muck.name == "Muck" && muck.isGame && muck.oses == ["windows", "macos", "linux"] && muck.deck == .playable)
+        #expect(entries[99]?.isGame == false)
+    }
+
+    @Test func garbageIsRefusedNotCrashed() {
+        #expect(throws: SteamLocalDataError.self) { try PackageInfoReader.ownedAppIDs(Data([1, 2, 3])) }
+        #expect(throws: SteamLocalDataError.self) { try AppInfoReader.read(Data(count: 40)) }
+        var truncated = appInfo(); truncated.removeLast(40)
+        _ = try? AppInfoReader.read(truncated)   // must return or throw, never trap
+    }
+}
+
+@Suite("Library analysis")
+struct LibraryAnalysisTests {
+    private func games() -> [AppInfoEntry] {
+        [AppInfoEntry(appID: 1, name: "Verified Game", type: "Game", oses: ["windows"], deck: .verified),
+         AppInfoEntry(appID: 2, name: "Mac Game", type: "Game", oses: ["windows", "macos"], deck: .unknown),
+         AppInfoEntry(appID: 3, name: "Mystery", type: "Game", oses: ["windows"], deck: .unknown)]
+    }
+
+    private func tmp() -> (StirredPaths, RecipeRepository) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-lib-\(UUID().uuidString)")
+        return (StirredPaths(root: root), RecipeRepository(directory: root.appendingPathComponent("recipes")))
+    }
+
+    @Test func offlineVerdictsUseDeckAndPlatforms() {
+        let (paths, recipes) = tmp(); defer { try? FileManager.default.removeItem(at: paths.root) }
+        let entries = LibraryAnalysis.entries(for: games(), installed: ["3"], recipes: recipes, cache: StoreCache(paths: paths))
+        #expect(entries.map(\.verdict.level) == [.likely, .native, .unknown])
+        #expect(entries.map(\.installed) == [false, false, true])
+        #expect(entries.allSatisfy { !$0.refined })
+    }
+
+    @Test func cacheRoundTripExpiryAndNegativeEntries() {
+        let (paths, _) = tmp(); defer { try? FileManager.default.removeItem(at: paths.root) }
+        let cache = StoreCache(paths: paths)
+        #expect(cache.read(1) == nil)
+        let info = StoreInfo(appID: 1, name: "G", isFree: true, windows: true, mac: false, categories: ["x"], notices: "n", headerImage: nil, directX: 12)
+        cache.write(1, info: info, now: Date())
+        #expect(cache.read(1)! == info)
+        #expect(cache.read(1, now: Date().addingTimeInterval(31 * 86_400)) == nil)
+        cache.write(2, info: nil, now: Date())
+        #expect(cache.read(2) != nil && cache.read(2)! == nil)
+        #expect(cache.read(2, now: Date().addingTimeInterval(8 * 86_400)) == nil)
+    }
+
+    @Test func refinementUsesStoreDetailsAndStopsOnRequest() async {
+        let (paths, recipes) = tmp(); defer { try? FileManager.default.removeItem(at: paths.root) }
+        let cache = StoreCache(paths: paths)
+        let json = #"{"1":{"success":true,"data":{"name":"Verified Game","pc_requirements":{"minimum":"DirectX: Version 12"}}}}"#
+        let client = StoreClient(fetch: { _ in Data(json.utf8) })
+        let g = games()
+        let entries = LibraryAnalysis.entries(for: g, installed: [], recipes: recipes, cache: cache)
+        final class Seen: @unchecked Sendable { var levels: [Int: VerdictLevel] = [:] }
+        let seen = Seen()
+        await LibraryAnalysis.refine(entries, games: g, recipes: recipes, cache: cache, client: client, delay: 0,
+                                     shouldStop: { false }) { updated, _, _ in seen.levels[updated.appID] = updated.verdict.level }
+        #expect(seen.levels[1] == .no)          // Deck verified, but needs DirectX 12
+        #expect(cache.read(1) != nil)
+        #expect(seen.levels[2] == nil)          // native Mac games are not refined
+        // A stop request before the first game does nothing.
+        let (paths2, recipes2) = tmp(); defer { try? FileManager.default.removeItem(at: paths2.root) }
+        let seen2 = Seen()
+        await LibraryAnalysis.refine(entries, games: g, recipes: recipes2, cache: StoreCache(paths: paths2), client: client, delay: 0,
+                                     shouldStop: { true }) { updated, _, _ in seen2.levels[updated.appID] = updated.verdict.level }
+        #expect(seen2.levels.isEmpty)
+    }
+
+    @Test func levelsRankBestFirst() {
+        #expect([VerdictLevel.no, .works, .maybe, .native, .unknown, .likely].sorted { $0.rank < $1.rank } == [.works, .native, .likely, .maybe, .unknown, .no])
+    }
+}

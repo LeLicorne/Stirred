@@ -10,6 +10,14 @@ struct SessionSummary: Identifiable, Hashable {
     let sampleCount: Int
 }
 
+/// Lets the background refinement see a "stop" request from the UI thread.
+final class StopFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    var isSet: Bool { lock.lock(); defer { lock.unlock() }; return value }
+    func set(_ new: Bool) { lock.lock(); value = new; lock.unlock() }
+}
+
 @MainActor @Observable
 final class AppModel {
     let launcher = Launcher()
@@ -30,6 +38,13 @@ final class AppModel {
     var setupError: String?
     /// Set when the user opened Steam by hand: then Stirred never closes it for them.
     private var userOpenedSteam = false
+    // "All my games"
+    var allGames: [LibraryEntry] = []
+    var allGamesError: String?
+    var allGamesLoading = false
+    var refining: (done: Int, total: Int)?
+    private var ownedInfo: [AppInfoEntry] = []
+    private let stopRefine = StopFlag()
     // "Check a game"
     var checkBusy = false
     var checkError: String?
@@ -166,6 +181,49 @@ final class AppModel {
             await MainActor.run { self?.checkBusy = false }
         }
     }
+
+    /// Reads the owned library from Steam's own cache files (instant), then improves the verdicts through the store in the background.
+    func loadAllGames() {
+        guard !allGamesLoading else { return }
+        allGamesLoading = true
+        allGamesError = nil
+        let launcher = self.launcher
+        Task.detached { [weak self] in
+            do {
+                let (games, entries) = try launcher.libraryEntries()
+                await MainActor.run {
+                    self?.ownedInfo = games
+                    self?.allGames = entries
+                    self?.allGamesLoading = false
+                    self?.startRefining()
+                }
+            } catch {
+                await MainActor.run { self?.allGamesError = "\(error)"; self?.allGamesLoading = false }
+            }
+        }
+    }
+
+    func startRefining() {
+        guard refining == nil else { return }
+        let todo = allGames.filter(LibraryAnalysis.needsRefinement)
+        guard !todo.isEmpty else { return }
+        refining = (0, todo.count)
+        stopRefine.set(false)
+        let launcher = self.launcher, games = ownedInfo, entries = allGames, flag = stopRefine
+        Task.detached { [weak self] in
+            await LibraryAnalysis.refine(entries, games: games, recipes: launcher.recipes, cache: launcher.storeCache,
+                                         client: StoreClient(), shouldStop: { flag.isSet }) { updated, done, total in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if let index = self.allGames.firstIndex(where: { $0.appID == updated.appID }) { self.allGames[index] = updated }
+                    self.refining = (done, total)
+                }
+            }
+            await MainActor.run { self?.refining = nil }
+        }
+    }
+
+    func stopRefining() { stopRefine.set(true) }
 
     func openCheck(appID: Int) {
         runCheck(String(appID))

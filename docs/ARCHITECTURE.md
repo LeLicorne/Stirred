@@ -50,6 +50,15 @@ logs/                         steam-client.log (rotated at 20 MB), dxvk/, sessio
 6. Clean-up: processes left in the game's folder are killed (`stopGame`); if Stirred started Steam for this session and the user did not
    open it by hand, Steam is shut down gracefully (`steam.exe -shutdown`, so cloud saves finish syncing), then anything left is killed.
 
+## Whole-library compatibility
+
+`SteamLocalData.swift` reads two of Steam's own binary cache files (`appcache/packageinfo.vdf`: which apps are licensed, `appcache/appinfo.vdf`:
+name, type, platforms and Steam Deck status of every app Steam has looked at; v41 format with a string table). Every read is bounds-checked and a
+format change raises a clear error instead of crashing. `LibraryAnalysis` turns that into instant verdicts (reusing `CompatVerdict`), then
+`refine` asks the store for the games a verdict could still change (probable / maybe / unknown), most promising first, one request every 1.6 s
+(Steam allows about 200 per 5 minutes; HTTP 429 waits a minute), results kept 30 days in `cache/store/`. Limit: the cache files belong to the
+Steam install, so they can mix accounts that signed in there, and they exist only after Steam has run and signed in once.
+
 ## Uninstall
 
 `Uninstall.swift` does what Steam's "Delete local content" does, without Steam's dialog: it deletes `steamapps/common/<folder>`, the shader

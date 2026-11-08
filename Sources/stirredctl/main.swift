@@ -47,7 +47,7 @@ func printPlan(_ plan: LaunchPlan) {
 
 func run() async throws {
     guard let command = args.first else {
-        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|check <game>|uninstall <game> [--yes]|library|plan <game>|run <game> [--watch] [--keep-steam] [--latency P] [--hud] [--async]|report [dir]>")
+        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|owned [--refine N]|check <game>|uninstall <game> [--yes]|library|plan <game>|run <game> [--watch] [--keep-steam] [--latency P] [--hud] [--async]|report [dir]>")
         print("<game> is an appid or part of the name, e.g. `stirredctl run muck --watch`")
         return
     }
@@ -83,6 +83,38 @@ func run() async throws {
         guard launcher.steamState() == .ready else { fail("Steam is not ready: start it first (`stirredctl steam`) and log in.") }
         try launcher.requestInstall(appID: id)
         print("Steam should now show an install dialog for app \(id): accept it there.")
+    case "owned":
+        // Every game this Steam install knows you own, ranked by compatibility. Instant and offline;
+        // `--refine N` then asks the store about the N most promising ones (slow: Steam rate-limits).
+        let (games, entries) = try launcher.libraryEntries()
+        final class Updates: @unchecked Sendable {
+            private let lock = NSLock()
+            private var byID: [Int: LibraryEntry] = [:]
+            func set(_ entry: LibraryEntry) { lock.lock(); byID[entry.appID] = entry; lock.unlock() }
+            func get() -> [Int: LibraryEntry] { lock.lock(); defer { lock.unlock() }; return byID }
+        }
+        let updates = Updates()
+        var current = entries
+        if let i = args.firstIndex(of: "--refine"), i + 1 < args.count, let n = Int(args[i + 1]) {
+            let limited = Array(current.filter(LibraryAnalysis.needsRefinement).prefix(n))
+            let keep = Set(limited.map(\.appID))
+            await LibraryAnalysis.refine(limited, games: games.filter { keep.contains($0.appID) }, recipes: launcher.recipes,
+                                         cache: launcher.storeCache, client: StoreClient(), delay: 700_000_000,
+                                         shouldStop: { false }) { updated, done, total in
+                updates.set(updated)
+                print("refined \(done)/\(total): \(updated.name) -> \(updated.verdict.level.rawValue)")
+            }
+        }
+        let refinedByID = updates.get()
+        current = current.map { refinedByID[$0.appID] ?? $0 }
+        var counts: [VerdictLevel: Int] = [:]
+        for e in current { counts[e.verdict.level, default: 0] += 1 }
+        print("\(current.count) games owned (\(current.filter(\.installed).count) installed, \(current.filter(\.refined).count) with store details)")
+        for level in [VerdictLevel.works, .native, .likely, .maybe, .unknown, .no] { print("  \(level.rawValue): \(counts[level] ?? 0)") }
+        for level in [VerdictLevel.works, .likely, .native] {
+            let names = current.filter { $0.verdict.level == level }.prefix(8).map(\.name)
+            if !names.isEmpty { print("\(level.rawValue) e.g. " + names.joined(separator: ", ")) }
+        }
     case "check":
         // Will it run? Works for games you do not own or have not installed. Name, app id or store link.
         guard args.count > 1 else { fail("usage: stirredctl check <name | appid | store link>") }

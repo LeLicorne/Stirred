@@ -3,10 +3,10 @@ import Charts
 import StirredCore
 
 enum Section: String, CaseIterable, Identifiable {
-    case library = "Library", check = "Check a game", activity = "Activity", logs = "Logs"
+    case library = "Library", all = "All my games", check = "Check a game", activity = "Activity", logs = "Logs"
     var id: String { rawValue }
     var icon: String {
-        switch self { case .library: "gamecontroller"; case .check: "magnifyingglass"; case .activity: "waveform.path.ecg"; case .logs: "doc.text.magnifyingglass" }
+        switch self { case .library: "gamecontroller"; case .all: "square.grid.2x2"; case .check: "magnifyingglass"; case .activity: "waveform.path.ecg"; case .logs: "doc.text.magnifyingglass" }
     }
 }
 
@@ -33,6 +33,7 @@ struct ContentView: View {
         } detail: {
             switch section ?? .library {
             case .library: LibraryView()
+            case .all: AllGamesView()
             case .check: CheckView()
             case .activity: ActivityView()
             case .logs: LogsView()
@@ -293,6 +294,123 @@ struct GameCard: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(model.engineName == nil)
         }
+    }
+}
+
+// MARK: - All my games
+
+extension VerdictLevel {
+    var title: String {
+        switch self {
+        case .works: "Tested"; case .native: "Mac version"; case .likely: "Probably works"
+        case .maybe: "Maybe"; case .unknown: "Unknown"; case .no: "Won't run"
+        }
+    }
+    var color: Color {
+        switch self {
+        case .works: .green; case .likely: .mint; case .native: .blue; case .maybe: .orange; case .no: .red; case .unknown: .gray
+        }
+    }
+}
+
+struct AllGamesView: View {
+    @Environment(AppModel.self) private var model
+    @State private var shown: Set<VerdictLevel> = [.works, .native, .likely, .maybe, .unknown]
+    @State private var search = ""
+
+    private var levels: [VerdictLevel] { [.works, .native, .likely, .maybe, .unknown, .no] }
+    private func count(_ level: VerdictLevel) -> Int { model.allGames.filter { $0.verdict.level == level }.count }
+
+    private var rows: [LibraryEntry] {
+        model.allGames
+            .filter { shown.contains($0.verdict.level) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search)) }
+            .sorted { $0.verdict.level.rank != $1.verdict.level.rank ? $0.verdict.level.rank < $1.verdict.level.rank : $0.name < $1.name }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                if let error = model.allGamesError {
+                    Banner(text: error, color: .orange)
+                    Button("Open Steam") { model.openSteamWindow() }
+                } else {
+                    Text(model.allGames.isEmpty ? "Reading your Steam library…" : "\(model.allGames.count) games you own, ranked by how likely they are to run")
+                        .font(.headline)
+                    HStack(spacing: 8) {
+                        ForEach(levels, id: \.self) { level in
+                            Toggle(isOn: Binding(get: { shown.contains(level) },
+                                                 set: { if $0 { shown.insert(level) } else { shown.remove(level) } })) {
+                                Text("\(level.title) \(count(level))")
+                            }
+                            .toggleStyle(.button).tint(level.color)
+                        }
+                    }
+                    TextField("Search your games", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 320)
+                    if let progress = model.refining {
+                        HStack(spacing: 10) {
+                            ProgressView(value: Double(progress.done), total: Double(max(progress.total, 1))).frame(maxWidth: 260)
+                            Text("Checking Steam store details \(progress.done)/\(progress.total): verdicts keep improving")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Button("Stop") { model.stopRefining() }.controlSize(.small)
+                        }
+                    }
+                }
+            }
+            .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+            Divider()
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(rows) { entry in
+                        AllGamesRow(entry: entry)
+                        Divider()
+                    }
+                }
+                .padding(.horizontal, 16)
+                if rows.isEmpty && !model.allGames.isEmpty {
+                    Text("No game matches these filters.").foregroundStyle(.secondary).padding(40)
+                }
+            }
+            Text("Based on Steam's own data and Steam Deck status: a hint, not a promise. Tested games are marked Tested.")
+                .font(.caption2).foregroundStyle(.secondary).padding(8)
+        }
+        .navigationTitle("All my games")
+        .task { if model.allGames.isEmpty { model.loadAllGames() } }
+    }
+}
+
+struct AllGamesRow: View {
+    @Environment(AppModel.self) private var model
+    let entry: LibraryEntry
+
+    var body: some View {
+        HStack(spacing: 12) {
+            AsyncImage(url: URL(string: "https://cdn.cloudflare.steamstatic.com/steam/apps/\(entry.appID)/header.jpg")) { image in
+                image.resizable().aspectRatio(contentMode: .fill)
+            } placeholder: { Rectangle().fill(.quaternary) }
+            .frame(width: 112, height: 52).clipShape(RoundedRectangle(cornerRadius: 6))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(entry.name).font(.headline).lineLimit(1)
+                Text(entry.verdict.reasons.first ?? entry.verdict.headline)
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+            Spacer(minLength: 12)
+            Text(entry.verdict.level.title).font(.caption.bold()).padding(.horizontal, 8).padding(.vertical, 3)
+                .background(entry.verdict.level.color.opacity(0.25), in: Capsule())
+            Group {
+                if entry.installed {
+                    Label("Installed", systemImage: "checkmark").font(.caption).foregroundStyle(.secondary)
+                } else if let phase = model.installPhase[entry.appID] {
+                    ProgressView().controlSize(.small).help(phase)
+                } else if entry.verdict.level == .native {
+                    Text("Use the Mac version").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Button("Install") { model.installGame(appID: entry.appID) }.controlSize(.small)
+                        .disabled(model.engineName == nil)
+                }
+            }
+            .frame(width: 130, alignment: .trailing)
+        }
+        .padding(.vertical, 8)
     }
 }
 

@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Steam store facts
 
-public struct StoreInfo: Sendable, Equatable {
+public struct StoreInfo: Sendable, Equatable, Codable {
     public var appID: Int
     public var name: String
     public var isFree: Bool
