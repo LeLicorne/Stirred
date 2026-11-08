@@ -50,6 +50,12 @@ logs/                         steam-client.log (rotated at 20 MB), dxvk/, sessio
 6. Clean-up: processes left in the game's folder are killed (`stopGame`); if Stirred started Steam for this session and the user did not
    open it by hand, Steam is shut down gracefully (`steam.exe -shutdown`, so cloud saves finish syncing), then anything left is killed.
 
+## Presets
+
+`Presets.swift` (`QualityPreset`, `PresetCatalog`). The chosen preset is stored as a personal override (or suggested by a recipe's `preset`); `Launcher.plan`
+turns it into a latency profile and extra `dxvk.conf` lines. Authority for latency: this run's option > personal latency > preset > recipe > default; for
+DXVK options: recipe and personal options win over the preset's. With no preset nothing changes.
+
 ## Diagnosis and personal overrides
 
 `Diagnoser.diagnose` is a pure function over a `DiagnosisInput` (setup state, plan, power, disk, the game's log text, the last session, whether DXVK is

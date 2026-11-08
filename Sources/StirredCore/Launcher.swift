@@ -84,15 +84,24 @@ public struct Launcher: Sendable {
         GameExecutableFinder.candidates(in: game.installDirectory ?? paths.root).first?.lastPathComponent ?? game.name
     }
 
+    /// The preset in effect for a game: the user's choice, else the recipe's suggestion, else none (the recipe's own settings apply).
+    public func preset(for game: Game) -> QualityPreset? { recipe(for: game)?.preset }
+
     public func plan(for game: Game, options: LaunchOptions = LaunchOptions()) -> LaunchPlan {
         let apis = GraphicsDetector.detect(executables: GameExecutableFinder.candidates(in: game.installDirectory ?? paths.root))
-        var plan = LaunchPlanner.plan(recipe: recipe(for: game), detectedAPIs: apis, latency: options.latency)
+        let recipe = recipe(for: game)
+        let preset = recipe?.preset.map { PresetCatalog.settings(for: $0, hardware: .current) }
+        // Authority for latency: this run's option > personal setting > preset > recipe > default.
+        let personalLatency = game.steamAppID.flatMap { overrides.read($0).latency }
+        var plan = LaunchPlanner.plan(recipe: recipe, detectedAPIs: apis, latency: options.latency ?? personalLatency ?? preset?.latency)
         if let mode = options.launchMode { plan.launchMode = mode }
+        let isUnity = game.installDirectory.map { FileManager.default.fileExists(atPath: $0.appendingPathComponent("UnityPlayer.dll").path) } ?? false
+        if let preset {
+            plan.dxvkOptions = preset.dxvkOptions.merging(plan.dxvkOptions) { _, existing in existing }
+        }
         // Recent Unity versions pick Vulkan by default: through MoltenVK it shows missing texture tiles. DirectX 11 (through DXVK)
         // renders correctly, so force it unless the recipe already chose a graphics API.
-        if let dir = game.installDirectory,
-           FileManager.default.fileExists(atPath: dir.appendingPathComponent("UnityPlayer.dll").path),
-           !plan.gameArguments.contains(where: { $0.hasPrefix("-force-") }) {
+        if isUnity, !plan.gameArguments.contains(where: { $0.hasPrefix("-force-") }) {
             plan.gameArguments.insert("-force-d3d11", at: 0)
         }
         return plan

@@ -265,13 +265,19 @@ struct GameCard: View {
                     .frame(maxWidth: .infinity, alignment: .topLeading)
 
                 HStack {
-                    Picker("Latency", selection: Binding(
-                        get: { model.selectedLatency(for: game) },
-                        set: { model.latency[game.id] = $0 })) {
-                        ForEach(LatencyProfile.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
+                    Picker("Preset", selection: Binding<QualityPreset?>(
+                        get: { model.preset(for: game) }, set: { model.setPreset($0, for: game) })) {
+                        Text("Default").tag(QualityPreset?.none)
+                        ForEach(QualityPreset.allCases) { Text($0.title).tag(QualityPreset?.some($0)) }
                     }
                     .labelsHidden().frame(width: 110).disabled(phase != nil || unsupported)
-                    .help("Lower = less input delay. 'Lowest' also turns V-Sync off (tearing possible).")
+                    .help("""
+                    Default: this game's own settings.
+                    Faster: \(QualityPreset.performance.summary)
+                    Balanced: \(QualityPreset.balanced.summary)
+                    Prettier: \(QualityPreset.quality.summary)
+                    Suggested for this Mac: \(PresetCatalog.recommended(for: .current).title). Presets change how the game is run, not its own graphics options.
+                    """)
                     Spacer()
                     action
                 }

@@ -9,11 +9,12 @@ public struct GameOverride: Codable, Sendable, Equatable {
     public var graphics: GraphicsBackend?
     public var latency: LatencyProfile?
     public var dxvkOptions: [String: String]?
+    public var preset: QualityPreset?
 
     public init(launchArgs: [String]? = nil, launchMode: LaunchMode? = nil, graphics: GraphicsBackend? = nil,
-                latency: LatencyProfile? = nil, dxvkOptions: [String: String]? = nil) {
+                latency: LatencyProfile? = nil, dxvkOptions: [String: String]? = nil, preset: QualityPreset? = nil) {
         self.launchArgs = launchArgs; self.launchMode = launchMode; self.graphics = graphics
-        self.latency = latency; self.dxvkOptions = dxvkOptions
+        self.latency = latency; self.dxvkOptions = dxvkOptions; self.preset = preset
     }
 
     public var isEmpty: Bool { self == GameOverride() }
@@ -60,6 +61,7 @@ public struct OverrideStore: Sendable {
         merged.launchMode = override.launchMode ?? merged.launchMode
         merged.graphics = override.graphics ?? merged.graphics
         merged.latency = override.latency ?? merged.latency
+        merged.preset = override.preset ?? merged.preset
         if let options = override.dxvkOptions { merged.dxvkOptions = (merged.dxvkOptions ?? [:]).merging(options) { _, new in new } }
         return merged
     }

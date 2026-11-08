@@ -47,7 +47,7 @@ func printPlan(_ plan: LaunchPlan) {
 
 func run() async throws {
     guard let command = args.first else {
-        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|owned [--refine N]|diagnose <game> [--fix]|check <game>|uninstall <game> [--yes]|library|plan <game>|run <game> [--watch] [--keep-steam] [--latency P] [--hud] [--async]|report [dir]>")
+        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|owned [--refine N]|preset <game> [name]|diagnose <game> [--fix]|check <game>|uninstall <game> [--yes]|library|plan <game>|run <game> [--watch] [--keep-steam] [--latency P] [--hud] [--async]|report [dir]>")
         print("<game> is an appid or part of the name, e.g. `stirredctl run muck --watch`")
         return
     }
@@ -115,6 +115,18 @@ func run() async throws {
             let names = current.filter { $0.verdict.level == level }.prefix(8).map(\.name)
             if !names.isEmpty { print("\(level.rawValue) e.g. " + names.joined(separator: ", ")) }
         }
+    case "preset":
+        // stirredctl preset <game> [faster|balanced|prettier|default]
+        guard args.count > 1 else { fail("usage: stirredctl preset <game> [faster|balanced|prettier|default]") }
+        let game = try findGame(args[1])
+        if args.count > 2 {
+            let names: [String: QualityPreset?] = ["faster": .performance, "balanced": .balanced, "prettier": .quality, "default": nil]
+            guard let chosen = names[args[2].lowercased()] else { fail("preset must be faster, balanced, prettier or default") }
+            try launcher.overrides.update(game.steamAppID ?? 0) { $0.preset = chosen }
+        }
+        let current = launcher.preset(for: game)
+        print("\(game.name): \(current?.title ?? "no preset (recipe defaults)")   recommended for this Mac: \(PresetCatalog.recommended(for: .current).title)")
+        printPlan(launcher.plan(for: game))
     case "diagnose":
         // What is wrong with this game? `--fix` applies every fix Stirred can do by itself.
         guard args.count > 1 else { fail("usage: stirredctl diagnose <game> [--fix]") }

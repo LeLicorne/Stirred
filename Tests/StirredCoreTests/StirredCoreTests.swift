@@ -986,3 +986,73 @@ struct OverrideTests {
         #expect(plan.launchMode == .direct && plan.gameArguments == ["-force-d3d11"])
     }
 }
+
+// MARK: - Presets
+
+@Suite("Presets")
+struct PresetTests {
+    private let hw16 = HardwareProfile(memoryGB: 16)
+
+    @Test func catalogMatchesWhatEachPresetPromises() {
+        let fast = PresetCatalog.settings(for: .performance, hardware: hw16)
+        #expect(fast.latency == .lowest && fast.dxvkOptions["dxvk.enableAsync"] == "True")
+        let balanced = PresetCatalog.settings(for: .balanced, hardware: hw16)
+        #expect(balanced.latency == .low && balanced.dxvkOptions.isEmpty)
+        let pretty = PresetCatalog.settings(for: .quality, hardware: hw16)
+        #expect(pretty.latency == .balanced && pretty.dxvkOptions["dxgi.maxFrameRate"] == "60")
+    }
+
+    @Test func recommendationFollowsMemory() {
+        #expect(PresetCatalog.recommended(for: HardwareProfile(memoryGB: 8)) == .performance)
+        #expect(PresetCatalog.recommended(for: hw16) == .balanced)
+        #expect(PresetCatalog.recommended(for: HardwareProfile(memoryGB: 32)) == .quality)
+    }
+
+    private func setup(unity: Bool, recipeLatency: LatencyProfile? = nil) throws -> (Launcher, Game, URL) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-preset-\(UUID().uuidString)")
+        let folder = root.appendingPathComponent("common/G")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        if unity { try Data().write(to: folder.appendingPathComponent("UnityPlayer.dll")) }
+        let recipes = root.appendingPathComponent("recipes/steam")
+        try FileManager.default.createDirectory(at: recipes, withIntermediateDirectories: true)
+        let latencyJSON = recipeLatency.map { #","latency":"\#($0.rawValue)""# } ?? ""
+        try #"{"appid":9,"name":"G","status":"playable","verified":false\#(latencyJSON)}"#
+            .write(to: recipes.appendingPathComponent("9.json"), atomically: true, encoding: .utf8)
+        let launcher = Launcher(paths: StirredPaths(root: root), recipesDirectory: root.appendingPathComponent("recipes"), resourcesDirectory: root)
+        return (launcher, Game(store: "steam", storeID: "9", name: "G", installDirectory: folder), root)
+    }
+
+    @Test func fasterPresetSetsLatencyAndAsyncShadersButNeverTouchesResolution() throws {
+        let (launcher, game, root) = try setup(unity: true); defer { try? FileManager.default.removeItem(at: root) }
+        try launcher.overrides.update(9) { $0.preset = .performance }
+        let plan = launcher.plan(for: game)
+        #expect(plan.latency == .lowest)
+        #expect(plan.dxvkOptions["dxvk.enableAsync"] == "True")
+        #expect(plan.gameArguments == ["-force-d3d11"])   // only Stirred's own Unity fix: no -screen-width
+    }
+
+    @Test func recipeAndPersonalDxvkOptionsWinOverThePreset() throws {
+        let (launcher, game, root) = try setup(unity: false); defer { try? FileManager.default.removeItem(at: root) }
+        try launcher.overrides.update(9) { $0.preset = .quality; $0.dxvkOptions = ["dxgi.maxFrameRate": "30"] }
+        #expect(launcher.plan(for: game).dxvkOptions["dxgi.maxFrameRate"] == "30")
+    }
+
+    @Test func authorityIsRunOptionThenPersonalThenPresetThenRecipe() throws {
+        let (launcher, game, root) = try setup(unity: false, recipeLatency: .lowest); defer { try? FileManager.default.removeItem(at: root) }
+        #expect(launcher.plan(for: game).latency == .lowest)                       // recipe alone
+        try launcher.overrides.update(9) { $0.preset = .quality }
+        #expect(launcher.plan(for: game).latency == .balanced)                     // the chosen preset beats the recipe
+        try launcher.overrides.update(9) { $0.latency = .low }
+        #expect(launcher.plan(for: game).latency == .low)                          // a personal latency beats the preset
+        #expect(launcher.plan(for: game, options: LaunchOptions(latency: .lowest)).latency == .lowest)   // this run's option beats all
+    }
+
+    @Test func aRecipeCanSuggestAPresetAndUsersCanClearTheirChoice() throws {
+        let (launcher, game, root) = try setup(unity: false); defer { try? FileManager.default.removeItem(at: root) }
+        #expect(launcher.preset(for: game) == nil)
+        try launcher.overrides.update(9) { $0.preset = .quality }
+        #expect(launcher.preset(for: game) == .quality)
+        try launcher.overrides.update(9) { $0.preset = nil }
+        #expect(launcher.preset(for: game) == nil)
+    }
+}

@@ -28,6 +28,11 @@ Measured on an Apple M4, 16 GB, macOS 27, Wine staging 11.21 (Gcenx), DXVK-macOS
 - `assert_<game>.exe_*.dmp` files in Steam's `dumps` folder are non-fatal assertions, not crashes.
 - Steam keeps showing "Stopping" while any process it tracks for the game is alive. **Stop** in Stirred kills the whole folder's processes.
 
+## Presets
+- Presets (Faster / Balanced / Prettier) only change what Stirred controls and has verified: frame queue and V-Sync (input delay),
+  background shader compilation, a 60 FPS cap. A render-resolution preset was tried and dropped: Unity's `-screen-width/-height` is overridden
+  by games that set their own resolution at startup (Muck still rendered at 1800x1169).
+
 ## Games
 
 - **Unity 2022+ shows missing texture tiles**: Unity picks Vulkan by default (its log says "graphics device is Vulkan"), which goes

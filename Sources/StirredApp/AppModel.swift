@@ -28,7 +28,8 @@ final class AppModel {
     var warnings: [String] = []
     var message: String?
     var phases: [String: String] = [:]          // game id -> "Starting Steam…" / "Playing"
-    var latency: [String: LatencyProfile] = [:]  // user's choice per game id
+    /// Bumped when a preset changes so cards redraw (presets are stored on disk).
+    var presetRevision = 0
     var showHUD = false
     var sessions: [SessionSummary] = []
     var setupItems: [SetupItem] = []
@@ -130,15 +131,21 @@ final class AppModel {
 
     func recipe(for game: Game) -> Recipe? { launcher.recipe(for: game) }
 
-    func selectedLatency(for game: Game) -> LatencyProfile {
-        latency[game.id] ?? recipe(for: game)?.latency ?? .low
+    func preset(for game: Game) -> QualityPreset? {
+        _ = presetRevision
+        return launcher.preset(for: game)
+    }
+
+    func setPreset(_ preset: QualityPreset?, for game: Game) {
+        try? launcher.overrides.update(game.steamAppID ?? 0) { $0.preset = preset }
+        presetRevision += 1
     }
 
     func play(_ game: Game) {
         guard phases[game.id] == nil else { return }
         message = nil
         phases[game.id] = "Preparing…"
-        let options = LaunchOptions(latency: selectedLatency(for: game), hud: showHUD)
+        let options = LaunchOptions(hud: showHUD)
         let launcher = self.launcher
         Task.detached { [weak self] in
             do {
