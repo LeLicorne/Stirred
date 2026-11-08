@@ -28,7 +28,12 @@ final class AppModel {
     var setupBusy = false
     var setupMessage: String?
     var setupError: String?
+    /// Set when the user opened Steam by hand: then Stirred never closes it for them.
+    private var userOpenedSteam = false
     private var started = false
+
+    /// Settings key shared with the toggle in the Library toolbar. Default: close Steam after playing.
+    var closeSteamAfterPlaying: Bool { UserDefaults.standard.object(forKey: "closeSteamAfterPlaying") as? Bool ?? true }
 
     func start() {
         guard !started else { return }
@@ -54,6 +59,7 @@ final class AppModel {
         engineName = snapshot.0?.name
         games = snapshot.1
         steam = snapshot.2
+        if snapshot.2 == .stopped { userOpenedSteam = false }
         sessions = snapshot.3
         setupItems = snapshot.4
         setupComplete = snapshot.4.allSatisfy(\.done)
@@ -98,6 +104,13 @@ final class AppModel {
                 await MainActor.run { self?.phases[game.id] = "Playing" }
                 await recorder.watch(maxSeconds: 8 * 3600)
                 try launcher.finish(&recorder)
+                let (keep, others) = await MainActor.run { () -> (Bool, Bool) in
+                    guard let self else { return (true, true) }
+                    let others = self.phases.contains { $0.key != game.id && $0.value == "Playing" }
+                    return (self.userOpenedSteam || !self.closeSteamAfterPlaying, others)
+                }
+                await launcher.cleanUpAfterGame(game, startedSteam: recorder.record.startedSteam ?? false,
+                                                keepSteam: keep, otherGamesRunning: others)
             } catch {
                 await MainActor.run { self?.message = "\(error)" }
             }
@@ -112,10 +125,12 @@ final class AppModel {
     }
 
     func startSteam() {
+        userOpenedSteam = true
         Task.detached { [launcher] in try? launcher.startSteam(silent: false) }
     }
 
     func openSteamWindow() {
+        userOpenedSteam = true
         let launcher = self.launcher
         Task.detached {
             if launcher.steamState() == .stopped { try? launcher.startSteam(silent: false) }

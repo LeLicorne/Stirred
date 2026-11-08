@@ -47,7 +47,7 @@ func printPlan(_ plan: LaunchPlan) {
 
 func run() async throws {
     guard let command = args.first else {
-        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|library|plan <game>|run <game> [--watch] [--latency P] [--hud] [--async]|report [dir]>")
+        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|library|plan <game>|run <game> [--watch] [--keep-steam] [--latency P] [--hud] [--async]|report [dir]>")
         print("<game> is an appid or part of the name, e.g. `stirredctl run muck --watch`")
         return
     }
@@ -103,6 +103,9 @@ func run() async throws {
         if args.contains("--watch") {
             await recorder.watch(maxSeconds: intOption("--seconds", default: 600), onEvent: { print($0) })
             print("report: \(try launcher.finish(&recorder).path)")
+            let startedSteam = recorder.record.startedSteam ?? false
+            await launcher.cleanUpAfterGame(game, startedSteam: startedSteam, keepSteam: args.contains("--keep-steam"), otherGamesRunning: false)
+            if startedSteam && !args.contains("--keep-steam") { print("Steam closed (started by this run; use --keep-steam to leave it open)") }
         } else {
             print("tip: add --watch to sample CPU/GPU while you play, or run `stirredctl report` afterwards")
         }

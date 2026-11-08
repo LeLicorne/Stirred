@@ -47,6 +47,8 @@ logs/                         steam-client.log (rotated at 20 MB), dxvk/, sessio
    per-game variables never reach the game.
 4. A session is opened, the game is launched (`steam` mode: `-applaunch`; `direct` mode: the exe itself with `SteamAppId`).
 5. The process is sampled every 3 s until it exits; the report is written.
+6. Clean-up: processes left in the game's folder are killed (`stopGame`); if Stirred started Steam for this session and the user did not
+   open it by hand, Steam is shut down gracefully (`steam.exe -shutdown`, so cloud saves finish syncing), then anything left is killed.
 
 ## The Steam display fix
 

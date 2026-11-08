@@ -9,7 +9,9 @@ Free, open source (GPL-3), built only from open-source components.
 ## What you get
 
 - **Library**: your installed Steam games with cover art, a compatibility badge, a latency setting and a **Play** button.
-  Stirred starts Steam in the background for you.
+  Stirred starts Steam in the background for you (no window) and **closes it again when your game ends**, along with anything the
+  game left behind (launchers, helpers). If you opened Steam yourself (for example to install a game), Stirred leaves it open until you
+  press **Quit** in the sidebar. The toolbar switch "Close Steam after playing" turns this behaviour off.
 - **Activity**: every launch is recorded (CPU, GPU, memory, crashes, graphics problems) with a plain-language summary.
 - **Logs**: Steam and graphics logs, searchable, with an "errors only" filter.
 - **One-time setup** inside the app: it downloads and installs everything it needs (about 300 MB).

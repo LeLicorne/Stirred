@@ -181,9 +181,20 @@ public struct Launcher: Sendable {
         try process.run()
     }
 
-    /// Stops Steam and every Wine process of the engine.
-    public func quitSteam() async {
+    /// Stops Steam and every Wine process of the engine. Graceful first (`steam.exe -shutdown` lets Steam finish
+    /// syncing cloud saves and playtime), then whatever is left is killed.
+    public func quitSteam(graceful: Bool = true) async {
         guard let runner = try? runner() else { return }
+        if graceful, steamState() != .stopped, let steam = try? steam(),
+           let shutdown = try? runner.makeProcess(
+               arguments: [steam.steamRoot.appendingPathComponent("Steam.exe").path, "-shutdown"],
+               workingDirectory: steam.steamRoot) {
+            try? shutdown.run()
+            for _ in 0..<20 {
+                if steamState() == .stopped { break }
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
         let server = runner.wine.deletingLastPathComponent().appendingPathComponent("wineserver")
         if let process = try? runner.makeProcess(arguments: [], extraEnvironment: [:]) {
             process.executableURL = server
@@ -193,10 +204,20 @@ public struct Launcher: Sendable {
         }
         try? await Task.sleep(nanoseconds: 2_000_000_000)
         _ = SystemSampler.run("/usr/bin/pkill", ["-9", "-f", paths.engines.path])
+        // Orphans whose command line is a Windows path (Steam's Chromium helpers) are not matched by the line above.
+        _ = SystemSampler.run("/usr/bin/pkill", ["-9", "-f", #"steamwebhelper(_real)?\.exe"#])
     }
 
     /// Stops the game and everything started from its folder (launchers, helpers). Steam keeps showing "Stopping"
     /// as long as any process it tracks for the game is alive (e.g. Ubisoft Connect for Trackmania).
+    /// After a game ended: remove what it left behind (launchers, helpers) and, if Stirred started Steam only for
+    /// this game, close Steam too, unless the user keeps it or another game is still running.
+    public func cleanUpAfterGame(_ game: Game, startedSteam: Bool, keepSteam: Bool, otherGamesRunning: Bool) async {
+        stopGame(game)
+        guard startedSteam, !keepSteam, !otherGamesRunning else { return }
+        await quitSteam(graceful: true)
+    }
+
     public func stopGame(_ game: Game) {
         for pattern in Self.stopPatterns(for: game, needle: processNeedle(for: game)) {
             _ = SystemSampler.run("/usr/bin/pkill", ["-f", pattern])
@@ -240,8 +261,10 @@ public struct Launcher: Sendable {
         }
         onPhase("Preparing graphics…")
         try await prepareGraphics(for: game, plan: plan, options: options)
-        let recorder = try SessionRecorder.begin(
+        var recorder = try SessionRecorder.begin(
             game: game, plan: plan, engine: try engine().name, processNeedle: processNeedle(for: game), paths: paths)
+        recorder.record.startedSteam = since != .distantPast
+        try recorder.save()
         onPhase("Launching…")
         _ = try steam().launch(game, plan: plan)
         return recorder

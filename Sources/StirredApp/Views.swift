@@ -133,6 +133,7 @@ struct SteamStatusBar: View {
 
 struct LibraryView: View {
     @Environment(AppModel.self) private var model
+    @AppStorage("closeSteamAfterPlaying") private var closeSteam = true
 
     var body: some View {
         ScrollView {
@@ -161,6 +162,11 @@ struct LibraryView: View {
         }
         .navigationTitle("Library")
         .toolbar {
+            ToolbarItem {
+                Toggle(isOn: $closeSteam) { Label("Close Steam after playing", systemImage: "power") }
+                    .toggleStyle(.button)
+                    .help("Stirred closes the Steam it started once your game ends (not if you opened Steam yourself)")
+            }
             ToolbarItem {
                 Toggle(isOn: Bindable(model).showHUD) { Label("FPS overlay", systemImage: "speedometer") }
                     .toggleStyle(.button)

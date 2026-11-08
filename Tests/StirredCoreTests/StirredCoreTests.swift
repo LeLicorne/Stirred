@@ -575,3 +575,22 @@ struct DXVKOptionsTests {
         #expect(conf.contains("d3d11.zeroWorkgroupMemory = True") && conf.contains("dxvk.useRawSsbo = True"))
     }
 }
+
+@Suite("Steam lifecycle record")
+struct SteamLifecycleTests {
+    @Test func oldSessionFilesWithoutTheFlagStillDecode() throws {
+        let rec = SessionRecord(
+            gameName: "G", store: "steam", storeID: "1", backend: "dxvk", latency: "low", engine: "e",
+            processNeedle: "G.exe", startedAt: Date(timeIntervalSince1970: 0), endedAt: nil, environment: [:], planWarnings: [],
+            system: SystemInfo(macOS: "27", chip: "M4", memoryGB: 16, lowPowerMode: false, onBattery: false), samples: [])
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        var object = try JSONSerialization.jsonObject(with: encoder.encode(rec)) as! [String: Any]
+        object.removeValue(forKey: "startedSteam")
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let old = try decoder.decode(SessionRecord.self, from: JSONSerialization.data(withJSONObject: object))
+        #expect(old.startedSteam == nil)
+        var flagged = rec; flagged.startedSteam = true
+        let round = try decoder.decode(SessionRecord.self, from: encoder.encode(flagged))
+        #expect(round.startedSteam == true)
+    }
+}

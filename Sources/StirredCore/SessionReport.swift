@@ -61,6 +61,8 @@ public struct SessionRecord: Codable, Sendable, Equatable {
     public var samples: [SessionSample]
     /// Folder name of the game under steamapps/common: used to tell this game's logs from other games'.
     public var installDirName: String? = nil
+    /// True when Stirred itself started Steam for this session (so it may close it afterwards).
+    public var startedSteam: Bool? = nil
 }
 
 // MARK: - Sampling
