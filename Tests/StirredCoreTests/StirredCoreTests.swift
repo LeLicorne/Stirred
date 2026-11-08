@@ -1320,3 +1320,50 @@ struct PresetTests {
         #expect(StickMapper.event(x: 0.7, y: 0.9) == nil)
     }
 }
+
+@Suite struct DXMTEngineTests {
+    private func world(withDXMT: Bool) throws -> (paths: StirredPaths, launcher: Launcher) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-dxmt-\(UUID().uuidString)")
+        let paths = StirredPaths(root: root)
+        for name in ["stirred-wine-11.21"] + (withDXMT ? ["stirred-wine-11.21-dxmt"] : []) {
+            let bin = paths.engines.appendingPathComponent("\(name)/bin")
+            try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+            let wine = bin.appendingPathComponent("wine")
+            try "#!/bin/sh\n".write(to: wine, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wine.path)
+        }
+        return (paths, Launcher(paths: paths, recipesDirectory: root, resourcesDirectory: root))
+    }
+
+    @Test func dxmtEngineIsNeverTheDefault() throws {
+        let w = try world(withDXMT: true)
+        #expect(EngineLocator.installedEngines(paths: w.paths).map(\.name) == ["stirred-wine-11.21"])
+        #expect(EngineLocator.preferred(paths: w.paths)?.name == "stirred-wine-11.21")
+        #expect(EngineLocator.dxmt(paths: w.paths)?.name == "stirred-wine-11.21-dxmt")
+        #expect(try w.launcher.engine(for: .dxmt).isDXMT)
+        #expect(try !w.launcher.engine(for: .dxvk).isDXMT)
+    }
+
+    @Test func withoutTheEngineDXMTIsRefusedAndRecipesFallBackToDXVK() throws {
+        let w = try world(withDXMT: false)
+        #expect(EngineLocator.dxmt(paths: w.paths) == nil)
+        #expect(throws: StirredError.self) { try w.launcher.engine(for: .dxmt) }
+        let dir = w.paths.root.appendingPathComponent("recipes/steam", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try #"{"appid": 42, "name": "X", "status": "playable", "verified": false, "graphics": "dxmt"}"#
+            .write(to: dir.appendingPathComponent("42.json"), atomically: true, encoding: .utf8)
+        let game = Game(store: "steam", storeID: "42", name: "X", installDirectory: nil)
+        let plan = w.launcher.plan(for: game)
+        #expect(plan.backend == .dxvk)
+        #expect(plan.requiredComponents.contains("dxvk"))
+        #expect(plan.warnings.contains { $0.contains("DXMT") })
+    }
+
+    @Test func steamEngineIsRememberedWhileSteamRuns() throws {
+        let w = try world(withDXMT: true)
+        try ActiveEngine.write(w.paths, EngineLocator.steamEngineFile, value: "stirred-wine-11.21-dxmt")
+        #expect(try w.launcher.engine().isDXMT)
+        try ActiveEngine.write(w.paths, EngineLocator.steamEngineFile, value: nil)
+        #expect(try !w.launcher.engine().isDXMT)
+    }
+}

@@ -4,8 +4,8 @@ Measured on an Apple M4, 16 GB, macOS 27, Wine staging 11.21 (Gcenx), DXVK-macOS
 
 ## Graphics
 
-- **DXMT (DX11→Metal) does not work** on this Wine: "Failed to create metal view, it seems like your Wine has no exported
-  symbols needed by DXMT". It would need a Wine built with `-fvisibility=default`.
+- **DXMT (DX11→Metal) needs the optional DXMT engine**: the standard Wine hides the symbols DXMT needs ("Failed to create metal view").
+  `Scripts/build-dxmt-engine.sh` builds an engine that works (see docs/DXMT.md); games set to DXMT fall back to DXVK without it.
 - **Official DXVK 2.x/3.x does not start on macOS**: it requires `geometryShader`, which Metal does not have.
   The Gcenx **DXVK-macOS 1.10.3** fork works and is what Stirred uses.
 - DXVK logs MoltenVK limitations that can make an object or effect invisible: *"Render pipeline compile failed ... int4 cannot
@@ -94,3 +94,7 @@ Rosetta 2 is to be reduced after macOS 27 (check Apple's current notes). Stirred
 - DXMT v0.80 (LGPL-2.1, supports geometry shaders) refuses to start on our Wine 11.21 (Gcenx): "Failed to create metal view ... no exported symbols". `winemac.so` exports 0 `macdrv_*` symbols; DXMT needs a Wine that exposes them (CrossOver 24+ built from CodeWeavers' free sources, or a Wine built with default symbol visibility).
 - Sikarugir's `WS12WineSikarugir11.0_1` engine does contain the exports but is not self-contained: `libinotify.0.dylib` and other libraries come from the Sikarugir app wrapper (`@rpath`, no LC_RPATH). With Gcenx's libraries on `DYLD_LIBRARY_PATH` wineserver runs but wineboot still fails to start.
 - Left to try: take the Frameworks from Sikarugir's wrapper template, or build CodeWeavers' Wine from source (hours of compiling). Neither is done. Everything downloaded for the test was deleted.
+
+## DXMT now works as an optional engine (2026-11-08)
+- RV There Yet? draws its 3D scene with DXMT on a patched Wine (`-dxmt` engine); a solo run of ~6 min ended cleanly. Multiplayer does not work yet
+  (Epic Online Services: "No online services are present", session creation times out). Orcs Must Die 3 not retested with DXMT.

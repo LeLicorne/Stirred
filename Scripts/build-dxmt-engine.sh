@@ -3,11 +3,15 @@
 # rebuilt from Wine 11.21 + Wine Staging 11.21 with the entry points DXMT needs exported (see Patches/dxmt/window_dxmt.c.inc),
 # plus DXMT v0.80 itself. Takes about 15 minutes of compiling; nothing in your real Stirred data is touched.
 # Needs: Xcode command line tools, Homebrew packages bison pkgconf autoconf mingw-w64, Rosetta 2, gh (GitHub CLI).
-# Usage: Scripts/build-dxmt-engine.sh [work-dir]      result: <work-dir>/engines/stirred-wine-11.21 (use STIRRED_ROOT=<work-dir>)
+# Usage: Scripts/build-dxmt-engine.sh [build-dir] [stirred-root]
+#   build-dir     sources and compiled objects (default ~/Library/Application Support/Stirred-dxmt-build)
+#   stirred-root  Stirred's data folder (default ~/Library/Application Support/Stirred); the result is
+#                 <stirred-root>/engines/stirred-wine-11.21-dxmt, an OPTIONAL engine: Stirred only uses it for games set to DXMT.
 set -eu
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-WORK="${1:-$HOME/Library/Application Support/Stirred-dxmt-test}"
-SRC="$WORK/build"; mkdir -p "$SRC" "$WORK/engines" "$WORK/prefixes"
+WORK="${1:-$HOME/Library/Application Support/Stirred-dxmt-build}"
+ROOT="${2:-$HOME/Library/Application Support/Stirred}"
+SRC="$WORK/build"; mkdir -p "$SRC" "$ROOT/engines"
 export PATH="/opt/homebrew/opt/bison/bin:/opt/homebrew/bin:$PATH" PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig
 cd "$SRC"
 [ -f wine-11.21.tar.xz ] || curl -fL -o wine-11.21.tar.xz https://dl.winehq.org/wine/source/11.x/wine-11.21.tar.xz
@@ -33,13 +37,12 @@ cd "$SRC"
 mkdir -p dxmt
 [ -f dxmt/dxmt-v0.80-builtin.tar.gz ] || gh release download v0.80 -R 3Shain/dxmt -p 'dxmt-v0.80-builtin.tar.gz' -D dxmt
 [ -d dxmt/x ] || { mkdir dxmt/x; tar -xzf dxmt/dxmt-v0.80-builtin.tar.gz -C dxmt/x; }
-ENGINE="$WORK/engines/stirred-wine-11.21"
-[ -d "$ENGINE" ] || cp -cR "$HOME/Library/Application Support/Stirred/engines/stirred-wine-11.21" "$ENGINE"
+ENGINE="$ROOT/engines/stirred-wine-11.21-dxmt"
+[ -d "$ENGINE" ] || cp -cR "$ROOT/engines/stirred-wine-11.21" "$ENGINE"
 LIB="$ENGINE/Wine Staging.app/Contents/Resources/wine/lib/wine"; X="$SRC/dxmt/x/v0.80"
 cp obj/dlls/winemac.drv/winemac.so "$LIB/x86_64-unix/winemac.so"
 cp "$X/x86_64-unix/winemetal.so" "$LIB/x86_64-unix/"
 for f in d3d10core d3d11 dxgi winemetal; do cp "$X/x86_64-windows/$f.dll" "$LIB/x86_64-windows/"; cp "$X/i386-windows/$f.dll" "$LIB/i386-windows/"; done
 cp "$X/x86_64-windows/nvapi64.dll" "$X/x86_64-windows/nvngx.dll" "$LIB/x86_64-windows/"
 echo "engine ready: $ENGINE"
-echo "Prefix: clone yours (instant) with:  cp -cR \"\$HOME/Library/Application Support/Stirred/prefixes/steam\" \"$WORK/prefixes/steam\""
-echo "then copy $X/x86_64-windows/winemetal.dll into <prefix>/drive_c/windows/system32 and i386-windows/winemetal.dll into syswow64."
+echo "Stirred copies winemetal.dll into the prefix by itself the first time a DXMT game starts."

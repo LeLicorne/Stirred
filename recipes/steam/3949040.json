@@ -1,12 +1,12 @@
 {
  "appid": 3949040,
  "name": "RV There Yet?",
- "status": "unsupported",
+ "status": "experimental",
  "verified": false,
- "graphics": "dxvk",
+ "graphics": "dxmt",
  "latency": "low",
  "launch_args": [
   "-dx11"
  ],
- "notes": "Unreal Engine 5. By default the game picks DirectX 12, which fails under Wine. Forced to DirectX 11 through DXVK-macOS with -dx11 (2026-11-08, M4 16 GB): the menu and HUD draw but the 3D scene stays black, and one session crashed about 15 s after loading the map. The log shows the same MoltenVK error as Orcs Must Die 3: a draw using a geometry shader fails ('Fragment input(s) user(locn2) mismatching vertex shader output'), and Metal also lacks the typed storage image formats Unreal's post-processing uses. -FeatureLevelES31 makes the game exit at start-up. These are limits of MoltenVK, not something a recipe can switch off. Multiplayer (Epic Online Services) untested."
+ "notes": "Unreal Engine 5. The game picks DirectX 12 by default, which fails under Wine: forced to DirectX 11 with -dx11. With DXVK + MoltenVK the 3D scene stays black (MoltenVK has no geometry shaders and lacks typed storage image formats). With the optional DXMT engine (Direct3D 11 -> Metal, Scripts/build-dxmt-engine.sh, docs/DXMT.md) the 3D scene is drawn and a first solo run of about 6 minutes in the map ended cleanly (2026-11-08, M4 16 GB). Without that engine Stirred falls back to DXVK. Multiplayer (Epic Online Services) is not working yet: the session creation times out."
 }

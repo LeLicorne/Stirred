@@ -13,18 +13,24 @@ What was needed (2026-11-08):
 - Result: the D3D11 smoke test (`Tests/Integration/d3d11_clear.c`) creates a device and swap chain and presents 360 frames with no
   error; RV There Yet? reaches its main menu with DXMT and no MoltenVK error in the log (DXVK removed from its folder, recipe
   `"graphics": "dxmt"`).
-- NOT verified: whether the 3D scene is now drawn. Metal windows cannot be captured from here (the capture is blank), so this needs
-  a human look. Also untested: stability over time, performance, multiplayer, other games.
+- Confirmed by a human (2026-11-08): the 3D scene of RV There Yet? is drawn with DXMT and a solo run of about 6 minutes in the map
+  ended cleanly. Not working: multiplayer (Epic Online Services: session creation times out). Untested: other games, long sessions.
 
-Try it (the test setup lives in `~/Library/Application Support/Stirred-dxmt-test`, a copy of your Windows environment made with
-APFS cloning, so your real Steam and games are untouched):
+## How Stirred uses it (optional engine)
 
-    cd ~/projects/stirred
-    STIRRED_ROOT="$HOME/Library/Application Support/Stirred-dxmt-test" \
-    STIRRED_RECIPES="$HOME/Library/Application Support/Stirred-dxmt-test/recipes" \
-    .build/debug/stirredctl run "rv there" --hud --keep-steam
+- The engine is `engines/stirred-wine-<version>-dxmt` (a copy of the normal engine with the rebuilt `winemac.so` and DXMT). It is never
+  chosen by default and is invisible to engine updates.
+- A game uses it when its recipe or personal setting says `"graphics": "dxmt"`. Without the engine installed, Stirred falls back to DXVK
+  and says so in the warnings, so shared recipes never break.
+- Steam and its games share one Wine, so when a DXMT game starts and Steam runs under the other engine, Stirred closes Steam
+  and restarts it with the right one (`engines/steam-engine.txt` remembers which, and is removed when Steam stops).
+- On first use Stirred copies `winemetal.dll` into the prefix's system folders and removes DXVK's DLLs, `dxvk.conf` and registry override
+  for that game; switching back to DXVK reinstalls them.
+- Install: `Scripts/build-dxmt-engine.sh` (about 15 minutes of compiling, needs Homebrew bison pkgconf autoconf mingw-w64 and gh).
+  Remove: delete the `-dxmt` folder in `engines/`.
 
-Stop it with the same variables and `stirredctl quit`. Delete the folder to remove everything.
+Manual test without Stirred's app (separate data folder, optional):
 
-Not done: using this engine from Stirred itself (per-game engine choice, sharing the real prefix, rollback). It waits for the
-visual check above. Wine and DXMT are LGPL: the patch and script are the corresponding source for the rebuilt `winemac.so`.
+    STIRRED_ROOT=<copy of your data> .build/debug/stirredctl run "rv there" --hud --keep-steam
+
+Wine and DXMT are LGPL: the patch and script are the corresponding source for the rebuilt `winemac.so`.

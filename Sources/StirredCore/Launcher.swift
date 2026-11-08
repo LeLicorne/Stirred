@@ -59,7 +59,24 @@ public struct Launcher: Sendable {
 
     // MARK: Engine, Steam, library
 
+    /// The engine Steam currently runs under (it chose it when it started), else the preferred one.
     public func engine() throws -> Engine {
+        if let name = ActiveEngine.read(paths, EngineLocator.steamEngineFile) {
+            let engine = Engine(directory: paths.engines.appendingPathComponent(name, isDirectory: true))
+            if engine.wineBinary != nil { return engine }
+        }
+        guard let engine = EngineLocator.preferred(paths: paths) else { throw StirredError.engineNotFound }
+        return engine
+    }
+
+    /// The engine a game needs: the optional DXMT one for the DXMT backend, the normal one otherwise.
+    public func engine(for backend: GraphicsBackend) throws -> Engine {
+        if backend == .dxmt {
+            guard let engine = EngineLocator.dxmt(paths: paths) else {
+                throw StirredError.blocked("The DXMT engine is not installed. Build it with Scripts/build-dxmt-engine.sh (see docs/DXMT.md).")
+            }
+            return engine
+        }
         guard let engine = EngineLocator.preferred(paths: paths) else { throw StirredError.engineNotFound }
         return engine
     }
@@ -95,6 +112,12 @@ public struct Launcher: Sendable {
         let personalLatency = game.steamAppID.flatMap { overrides.read($0).latency }
         var plan = LaunchPlanner.plan(recipe: recipe, detectedAPIs: apis, latency: options.latency ?? personalLatency ?? preset?.latency)
         if let mode = options.launchMode { plan.launchMode = mode }
+        // Recipes are shared: without the optional DXMT engine, fall back to DXVK instead of failing.
+        if plan.backend == .dxmt, EngineLocator.dxmt(paths: paths) == nil {
+            plan.backend = .dxvk
+            plan.requiredComponents = plan.requiredComponents.filter { $0 != "dxvk" } + ["dxvk"]
+            plan.warnings.append("This game is best with the optional DXMT engine, which is not installed: using DXVK (3D scenes may stay black).")
+        }
         let isUnity = game.installDirectory.map { FileManager.default.fileExists(atPath: $0.appendingPathComponent("UnityPlayer.dll").path) } ?? false
         if let preset {
             plan.dxvkOptions = preset.dxvkOptions.merging(plan.dxvkOptions) { _, existing in existing }
@@ -114,6 +137,7 @@ public struct Launcher: Sendable {
     /// Installs DXVK next to each candidate executable and sets the per-executable Wine overrides. Returns log lines.
     @discardableResult
     public func prepareGraphics(for game: Game, plan: LaunchPlan, options: LaunchOptions) async throws -> [String] {
+        if plan.backend == .dxmt { return try await prepareDXMT(for: game) }
         guard plan.backend == .dxvk, let dir = game.installDirectory else { return [] }
         guard FileManager.default.fileExists(atPath: dxvkPackage.path) else {
             throw StirredError.blocked("DXVK component missing at \(dxvkPackage.path). Run Scripts/install-components.sh")
@@ -134,6 +158,40 @@ public struct Launcher: Sendable {
     }
 
     // MARK: Game updater
+
+    /// DXMT: the engine's own Direct3D DLLs must win, so DXVK's copies and overrides are removed from the game's folder, and
+    /// `winemetal.dll` (the bridge to Metal) is placed in the Windows system folders of the prefix.
+    @discardableResult
+    func prepareDXMT(for game: Game) async throws -> [String] {
+        let engine = try engine(for: .dxmt)
+        guard let lib = engine.libraryDirectory else { throw StirredError.engineNotFound }
+        let prefix = paths.prefix(named: "steam")
+        var lines: [String] = []
+        for (source, target) in [("x86_64-windows", "system32"), ("i386-windows", "syswow64")] {
+            let from = lib.appendingPathComponent("\(source)/winemetal.dll")
+            let to = prefix.appendingPathComponent("drive_c/windows/\(target)/winemetal.dll")
+            guard FileManager.default.fileExists(atPath: from.path) else { throw StirredError.blocked("winemetal.dll missing in the DXMT engine.") }
+            try? FileManager.default.createDirectory(at: to.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if FileManager.default.fileExists(atPath: to.path) { try FileManager.default.removeItem(at: to) }
+            try FileManager.default.copyItem(at: from, to: to)
+        }
+        guard let dir = game.installDirectory else { return lines }
+        let runner = try runner()
+        for exe in GameExecutableFinder.candidates(in: dir) {
+            let folder = exe.deletingLastPathComponent()
+            var removed = false
+            for name in DXVKInstaller.dlls + ["dxvk.conf"] {
+                let file = folder.appendingPathComponent(name)
+                if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file); removed = true }
+            }
+            if removed {
+                _ = try? await runner.runAndWait(arguments: ["reg", "delete", "HKCU\\Software\\Wine\\AppDefaults\\\(exe.lastPathComponent)", "/f"])
+                lines.append("DXVK removed for \(exe.lastPathComponent)")
+            }
+        }
+        lines.append("dxmt ready")
+        return lines
+    }
 
     public func updater(for game: Game) -> GameUpdater? { recipe(for: game)?.updater }
 
@@ -199,7 +257,14 @@ public struct Launcher: Sendable {
     }
 
     /// `silent`: start minimised (no Steam window), only sensible once a login is remembered.
-    public func startSteam(silent: Bool) throws {
+    public func startSteam(silent: Bool, backend: GraphicsBackend? = nil) throws {
+        // Steam and its games share one Wine: the engine is chosen here, once, and remembered until Steam stops.
+        if let backend {
+            let chosen = try engine(for: backend)
+            try? ActiveEngine.write(paths, EngineLocator.steamEngineFile, value: chosen.name)
+        } else if ActiveEngine.read(paths, EngineLocator.steamEngineFile) == nil, let preferred = EngineLocator.preferred(paths: paths) {
+            try? ActiveEngine.write(paths, EngineLocator.steamEngineFile, value: preferred.name)
+        }
         let steam = try steam()
         if let wrapper = wrapperURL { _ = try? WebHelperWrapper.ensure(steamRoot: steam.steamRoot, wrapper: wrapper) }
         // A windowless start only works when a login is remembered; otherwise the user must see the sign-in window.
@@ -282,6 +347,7 @@ public struct Launcher: Sendable {
         _ = SystemSampler.run("/usr/bin/pkill", ["-9", "-f", paths.engines.path])
         // Orphans whose command line is a Windows path (Steam's Chromium helpers) are not matched by the line above.
         _ = SystemSampler.run("/usr/bin/pkill", ["-9", "-f", #"steamwebhelper(_real)?\.exe"#])
+        try? ActiveEngine.write(paths, EngineLocator.steamEngineFile, value: nil)
     }
 
     /// Stops the game and everything started from its folder (launchers, helpers). Steam keeps showing "Stopping"
@@ -324,12 +390,18 @@ public struct Launcher: Sendable {
 
         var since = Date.distantPast
         var timeout: TimeInterval = 240
+        // A game that needs the other engine (DXMT or not) than the one Steam runs under: restart Steam with the right one.
+        let wanted = try engine(for: plan.backend).name
+        if steamState() != .stopped, let running = ActiveEngine.read(paths, EngineLocator.steamEngineFile), running != wanted {
+            onPhase("Restarting Steam with the \(plan.backend == .dxmt ? "DXMT" : "standard") engine…")
+            await quitSteam(graceful: true)
+        }
         if steamState() == .stopped {
             let remembered = (try? steam().hasRememberedLogin) ?? false
             onPhase(remembered ? "Starting Steam…" : "Sign in to Steam in the window that opens…")
             if !remembered { timeout = 600 }
             since = Date()
-            try startSteam(silent: true)
+            try startSteam(silent: true, backend: plan.backend)
         }
         onPhase("Waiting for Steam…")
         guard await waitUntilSteamReady(since: since, timeout: timeout) else {
