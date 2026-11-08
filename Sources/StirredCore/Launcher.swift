@@ -83,6 +83,13 @@ public struct Launcher: Sendable {
         let apis = GraphicsDetector.detect(executables: GameExecutableFinder.candidates(in: game.installDirectory ?? paths.root))
         var plan = LaunchPlanner.plan(recipe: recipe(for: game), detectedAPIs: apis, latency: options.latency)
         if let mode = options.launchMode { plan.launchMode = mode }
+        // Recent Unity versions pick Vulkan by default: through MoltenVK it shows missing texture tiles. DirectX 11 (through DXVK)
+        // renders correctly, so force it unless the recipe already chose a graphics API.
+        if let dir = game.installDirectory,
+           FileManager.default.fileExists(atPath: dir.appendingPathComponent("UnityPlayer.dll").path),
+           !plan.gameArguments.contains(where: { $0.hasPrefix("-force-") }) {
+            plan.gameArguments.insert("-force-d3d11", at: 0)
+        }
         return plan
     }
 

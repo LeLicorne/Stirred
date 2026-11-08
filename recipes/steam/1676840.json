@@ -1,0 +1,1 @@
+{"appid":1676840,"name":"For The King II","status":"experimental","verified":false,"graphics":"dxvk","latency":"low","launch_args":["-force-d3d11"],"notes":"Unity 2022.3, 64-bit. Unity picks Vulkan by default, which shows missing texture tiles through MoltenVK: -force-d3d11 makes it use DirectX 11 through DXVK instead. Being tested."}

@@ -524,3 +524,25 @@ struct LibraryFilterTests {
         #expect(!Launcher.hiddenAppIDs.contains("1625450"))
     }
 }
+
+@Suite("Unity default")
+struct UnityDefaultTests {
+    @Test func unityGamesAreForcedToDirect3D11UnlessTheRecipeSaysOtherwise() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-unity-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let unity = tmp.appendingPathComponent("common/U"), other = tmp.appendingPathComponent("common/O")
+        for dir in [unity, other] { try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) }
+        try Data().write(to: unity.appendingPathComponent("UnityPlayer.dll"))
+        let launcher = Launcher(paths: StirredPaths(root: tmp), recipesDirectory: tmp, resourcesDirectory: tmp)
+        let unityGame = Game(store: "steam", storeID: "1", name: "U", installDirectory: unity)
+        let otherGame = Game(store: "steam", storeID: "2", name: "O", installDirectory: other)
+        #expect(launcher.plan(for: unityGame).gameArguments == ["-force-d3d11"])
+        #expect(launcher.plan(for: otherGame).gameArguments.isEmpty)
+        // A recipe that already chooses an API keeps it.
+        let steamDir = tmp.appendingPathComponent("steam"); try FileManager.default.createDirectory(at: steamDir, withIntermediateDirectories: true)
+        try #"{"appid":3,"name":"V","status":"playable","verified":false,"launch_args":["-force-vulkan"]}"#
+            .write(to: steamDir.appendingPathComponent("3.json"), atomically: true, encoding: .utf8)
+        let unityVulkan = Game(store: "steam", storeID: "3", name: "V", installDirectory: unity)
+        #expect(launcher.plan(for: unityVulkan).gameArguments == ["-force-vulkan"])
+    }
+}

@@ -30,6 +30,10 @@ Measured on an Apple M4, 16 GB, macOS 27, Wine staging 11.21 (Gcenx), DXVK-macOS
 
 ## Games
 
+- **Unity 2022+ shows missing texture tiles**: Unity picks Vulkan by default (its log says "graphics device is Vulkan"), which goes
+  through MoltenVK and corrupts textures. Stirred now adds `-force-d3d11` to every Unity game (detected by `UnityPlayer.dll`),
+  so the game uses DirectX 11 through DXVK. **Always start games from Stirred**: from Steam's own window DXVK and these launch
+  arguments are not applied.
 - **32-bit Unity 2019** (Cat Purrtrol) crashes at startup: access violation in `UnityPlayer.dll`, then *"Exception frame is not in stack limits"*
   (32-bit code in Wine's WoW64 mode on macOS). Same with Wine devel, with or without DXVK. 64-bit Unity games work.
 - **Warframe**: its launcher (`Tools/Launcher.exe`, Chromium) is blank under Wine and hashes itself, so the game is started
