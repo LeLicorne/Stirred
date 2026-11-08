@@ -65,3 +65,10 @@ Rosetta 2 is to be reduced after macOS 27 (check Apple's current notes). Stirred
 ## Game updater (Warframe)
 - "Update game" prepares the game's launcher for Wine (DXVK next to it, shader compiler disabled for it only) and runs it through Steam. Checked 2026-11-08 on an up-to-date game: Steam started the launcher and it ended by itself after about 20 s. An actual update (when Warframe asks for one) has not been re-tested since this button replaced the manual script.
 - Only recipes with an `updater` entry get the button (Warframe today).
+
+## Disk management
+- A moved game keeps its folder in `steamapps/common` as a link to the other disk; Steam's own files are not edited. Checked 2026-11-08 with a throw-away disk image: copy across volumes, Muck detected running through the link, move back. Not checked on a real external disk (exFAT/NTFS drives may behave differently) nor with a game that Steam updates while moved.
+- If the disk is unplugged the card shows a red disk icon and Play fails; plug it in again.
+- A moved game cannot be uninstalled from Stirred until it is moved back.
+- Only Steam games, and only while nothing is downloading. Steam is closed during the move.
+- "Can be cleaned" only deletes setup downloads and Steam's shader cache, never saves, games or prefixes. The low-space warning appears under 20 GB free.

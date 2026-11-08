@@ -232,6 +232,37 @@ func run() async throws {
             print("Removed the imported recipe for \(id) (the bundled one, if any, applies again).")
         default: fail("usage: stirredctl recipe export|import|list|remove")
         }
+    case "disk":
+        let gb = { (b: Int64) in ByteCountFormatter.string(fromByteCount: b, countStyle: .file) }
+        let report = launcher.diskReport()
+        if args.count > 1, args[1] == "clean" {
+            var freed: Int64 = 0
+            for item in report.reclaimable { freed += DiskCleaner.clean(item); print("cleaned: \(item.title)") }
+            print("freed \(gb(freed))")
+        } else {
+            if let space = report.space { print("this Mac: \(gb(space.free)) free of \(gb(space.total))\(space.isLow ? "  (LOW)" : "")") }
+            print("games on this Mac: \(gb(report.gamesOnThisMac))   on other disks: \(gb(report.gamesOnOtherDisks))   engine: \(gb(report.engine))")
+            for item in report.reclaimable { print("can be cleaned: \(item.title) \(gb(item.bytes))  (stirredctl disk clean)") }
+            for game in (try? launcher.installedGames()) ?? [] {
+                switch launcher.storageLocation(of: game) {
+                case .thisMac: break
+                case .external(let url): print("moved: \(game.name) -> \(url.path)")
+                case .missing(let url): print("DISK NOT CONNECTED: \(game.name) -> \(url.path)")
+                }
+            }
+        }
+    case "move":
+        guard args.count > 2 else { fail("usage: stirredctl move <game> <folder on another disk>  |  stirredctl move <game> --back") }
+        let game = try findGame(args[1])
+        let plan = args[2] == "--back" ? try launcher.movePlanBack(for: game) : try launcher.movePlan(for: game, to: URL(fileURLWithPath: args[2]))
+        print("\(plan.direction == .toExternal ? "Moving" : "Moving back") \(game.name) (\(ByteCountFormatter.string(fromByteCount: plan.bytes, countStyle: .file))): \(plan.from.path) -> \(plan.direction == .toExternal ? plan.to.path : plan.libraryFolder.path)")
+        final class Last: @unchecked Sendable { var value = -1 }
+        let last = Last()
+        try await launcher.move(plan, onPhase: { print($0) }, progress: { p in
+            let percent = Int(p * 100) / 10 * 10
+            if percent != last.value { last.value = percent; print("\(percent)%") }
+        })
+        print("done")
     case "report":
         let dir = args.count > 1 ? URL(fileURLWithPath: args[1])
             : SessionRecorder.sessionsDirectory(launcher.paths).appendingPathComponent("latest").resolvingSymlinksInPath()

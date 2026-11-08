@@ -1126,3 +1126,84 @@ struct PresetTests {
         #expect(repo.recipe(forSteamAppID: 7)?.name == "Bundled")
     }
 }
+
+@Suite struct DiskManagementTests {
+    /// A fake Steam library with one 3-file game, and a separate "external" folder.
+    private func fixture() throws -> (root: URL, steam: URL, game: Game, external: URL) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-disk-\(UUID().uuidString)")
+        let steam = root.appendingPathComponent("Steam")
+        let folder = steam.appendingPathComponent("steamapps/common/Cool Game")
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("data"), withIntermediateDirectories: true)
+        try Data(count: 1000).write(to: folder.appendingPathComponent("game.exe"))
+        try Data(count: 2000).write(to: folder.appendingPathComponent("data/a.pak"))
+        try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("data/link"), withDestinationURL: URL(fileURLWithPath: "a.pak"))
+        let external = root.appendingPathComponent("External")
+        try FileManager.default.createDirectory(at: external, withIntermediateDirectories: true)
+        let game = Game(store: "steam", storeID: "9", name: "Cool Game", installDirectory: folder)
+        return (root, steam, game, external)
+    }
+
+    @Test func movesToAnotherFolderLeavesALinkAndMovesBack() throws {
+        let f = try fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        let plan = try GameMover.plan(for: f.game, to: f.external, steamRoot: f.steam)
+        try GameMover.execute(plan)
+        let folder = f.game.installDirectory!
+        #expect(GameMover.isLink(folder))
+        #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent("data/a.pak").path))
+        #expect(GameMover.location(of: f.game) == .external(f.external.appendingPathComponent("Stirred Games/Cool Game").resolvingSymlinksInPath()))
+        #expect(throws: UninstallError.self) { try Uninstaller.plan(for: f.game, steamRoot: f.steam) }
+        #expect(throws: MoveError.self) { try GameMover.plan(for: f.game, to: f.external, steamRoot: f.steam) }
+
+        let back = try GameMover.planBack(for: f.game, steamRoot: f.steam)
+        try GameMover.execute(back)
+        #expect(!GameMover.isLink(folder))
+        #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent("game.exe").path))
+        #expect(!FileManager.default.fileExists(atPath: f.external.appendingPathComponent("Stirred Games").path))
+        #expect(!FileManager.default.fileExists(atPath: folder.path + ".stirred-moving"))
+    }
+
+    @Test func reportsAMissingDiskAndRefusesToMoveBack() throws {
+        let f = try fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        try GameMover.execute(try GameMover.plan(for: f.game, to: f.external, steamRoot: f.steam))
+        try FileManager.default.removeItem(at: f.external.appendingPathComponent("Stirred Games"))   // "unplugged"
+        if case .missing = GameMover.location(of: f.game) {} else { Issue.record("expected a missing disk") }
+        #expect(throws: MoveError.self) { try GameMover.planBack(for: f.game, steamRoot: f.steam) }
+    }
+
+    @Test func refusesUnsafeDestinationsAndFolders() throws {
+        let f = try fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        #expect(throws: MoveError.self) { try GameMover.plan(for: f.game, to: f.steam, steamRoot: f.steam) }
+        #expect(throws: MoveError.self) { try GameMover.plan(for: f.game, to: f.root.appendingPathComponent("nope"), steamRoot: f.steam) }
+        var odd = f.game; odd.installDirectory = f.root
+        #expect(throws: MoveError.self) { try GameMover.plan(for: odd, to: f.external, steamRoot: f.steam) }
+        var downloading = f.game; downloading.downloadProgress = 0.4
+        #expect(throws: MoveError.self) { try GameMover.plan(for: downloading, to: f.external, steamRoot: f.steam) }
+    }
+
+    @Test func copyTreeKeepsEverythingIncludingLinks() throws {
+        let f = try fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        let source = f.game.installDirectory!, target = f.external.appendingPathComponent("copy")
+        var last = 0.0
+        try GameMover.copyTree(from: source, to: target, bytes: 3000) { last = $0 }
+        #expect(Uninstaller.size(of: target) == 3000)
+        #expect(GameMover.isLink(target.appendingPathComponent("data/link")))
+        #expect(last == 1)
+    }
+
+    @Test func cleanerOnlyEmptiesItsOwnFolders() throws {
+        let f = try fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        let paths = StirredPaths(root: f.root.appendingPathComponent("data"))
+        try FileManager.default.createDirectory(at: paths.downloads, withIntermediateDirectories: true)
+        try Data(count: 500).write(to: paths.downloads.appendingPathComponent("wine.tar.xz"))
+        let items = DiskCleaner.reclaimables(paths: paths, steamRoot: f.steam)
+        #expect(items.map(\.id) == ["downloads"] && items[0].bytes == 500)
+        #expect(DiskCleaner.clean(items[0]) == 500)
+        #expect(FileManager.default.fileExists(atPath: paths.downloads.path))
+        #expect(FileManager.default.fileExists(atPath: f.game.installDirectory!.path))
+    }
+
+    @Test func lowSpaceThreshold() {
+        #expect(DiskSpace(total: 500_000_000_000, free: 5_000_000_000).isLow)
+        #expect(!DiskSpace(total: 500_000_000_000, free: 100_000_000_000).isLow)
+    }
+}

@@ -103,6 +103,7 @@ final class AppModel {
         setupItems = snapshot.4
         setupComplete = snapshot.4.allSatisfy(\.done)
         warnings = PowerAdvice.warnings(for: .current)
+        diskSpace = DiskSpace.of(launcher.paths.root)
         if let watch = installWatch {
             if games.contains(where: { $0.downloadProgress != nil }) {
                 installWatch?.sawDownload = true
@@ -154,6 +155,64 @@ final class AppModel {
             message = "\(result.replaced ? "Replaced" : "Imported") the recipe for \(result.recipe.name). It applies at the next launch."
             presetRevision += 1
         } catch { message = "\(error)" }
+    }
+
+    // MARK: Disk
+
+    var diskSpace: DiskSpace?
+    var diskReport: DiskReport?
+    var diskBusy = false
+
+    func loadDiskReport() {
+        diskBusy = true
+        let launcher = self.launcher
+        Task.detached { [weak self] in
+            let report = launcher.diskReport()
+            await MainActor.run { self?.diskReport = report; self?.diskSpace = report.space; self?.diskBusy = false }
+        }
+    }
+
+    func clean(_ item: Reclaimable) {
+        diskBusy = true
+        Task.detached { [weak self] in
+            let freed = DiskCleaner.clean(item)
+            await MainActor.run { self?.message = "Freed \(ByteCountFormatter.string(fromByteCount: freed, countStyle: .file))." }
+            await self?.loadDiskReport()
+        }
+    }
+
+    func location(of game: Game) -> StorageLocation { launcher.storageLocation(of: game) }
+
+    /// Asks for a folder on another disk, then moves the game there (Steam is closed meanwhile).
+    func moveToAnotherDisk(_ game: Game) {
+        guard phases[game.id] == nil else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+        panel.directoryURL = URL(fileURLWithPath: "/Volumes")
+        panel.prompt = "Move here"
+        panel.message = "Choose the disk or folder for \(game.name). Stirred creates a \"Stirred Games\" folder there. Steam is closed while the files move."
+        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        runMove(game) { try $0.movePlan(for: game, to: folder) }
+    }
+
+    func moveBack(_ game: Game) { runMove(game) { try $0.movePlanBack(for: game) } }
+
+    private func runMove(_ game: Game, plan makePlan: @escaping @Sendable (Launcher) throws -> MovePlan) {
+        message = nil
+        phases[game.id] = "Checking…"
+        let launcher = self.launcher
+        Task.detached { [weak self] in
+            do {
+                let plan = try makePlan(launcher)
+                try await launcher.move(plan, onPhase: { phase in Task { @MainActor in self?.phases[game.id] = phase } },
+                                        progress: { p in Task { @MainActor in self?.phases[game.id] = "Moving \(Int(p * 100))%" } })
+                await MainActor.run { self?.message = "\(game.name) moved. Steam starts again at the next Play." }
+            } catch {
+                await MainActor.run { self?.message = "\(error)" }
+            }
+            await MainActor.run { self?.phases[game.id] = nil }
+            await self?.refresh()
+        }
     }
 
     func hasUpdater(_ game: Game) -> Bool { launcher.updater(for: game) != nil }

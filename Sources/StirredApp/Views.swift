@@ -3,10 +3,10 @@ import Charts
 import StirredCore
 
 enum Section: String, CaseIterable, Identifiable {
-    case library = "Library", all = "All my games", check = "Check a game", activity = "Activity", logs = "Logs"
+    case library = "Library", all = "All my games", check = "Check a game", disk = "Disk", activity = "Activity", logs = "Logs"
     var id: String { rawValue }
     var icon: String {
-        switch self { case .library: "gamecontroller"; case .all: "square.grid.2x2"; case .check: "magnifyingglass"; case .activity: "waveform.path.ecg"; case .logs: "doc.text.magnifyingglass" }
+        switch self { case .library: "gamecontroller"; case .all: "square.grid.2x2"; case .check: "magnifyingglass"; case .disk: "internaldrive"; case .activity: "waveform.path.ecg"; case .logs: "doc.text.magnifyingglass" }
     }
 }
 
@@ -35,6 +35,7 @@ struct ContentView: View {
             case .library: LibraryView()
             case .all: AllGamesView()
             case .check: CheckView()
+            case .disk: DiskView()
             case .activity: ActivityView()
             case .logs: LogsView()
             }
@@ -153,6 +154,9 @@ struct LibraryView: View {
                     Banner(text: "No Wine engine found. Run Scripts/assemble-engine.sh, then relaunch.", color: .red)
                 }
                 ForEach(model.warnings, id: \.self) { Banner(text: $0, color: .yellow) }
+                if let space = model.diskSpace, space.isLow {
+                    Banner(text: "Only \(ByteCountFormatter.string(fromByteCount: space.free, countStyle: .file)) left on this Mac: installs may fail. Free space in the Disk section.", color: .orange)
+                }
                 if model.steam == .running && model.games.isEmpty {
                     Banner(text: "Steam is starting or waiting for you to sign in: use Open Steam in the sidebar.", color: .blue)
                 }
@@ -247,6 +251,11 @@ struct GameCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(game.name).font(.headline).lineLimit(1)
+                    switch model.location(of: game) {
+                    case .thisMac: EmptyView()
+                    case .external(let url): Image(systemName: "externaldrive").foregroundStyle(.secondary).help("On another disk: \(url.path)")
+                    case .missing(let url): Image(systemName: "externaldrive.badge.xmark").foregroundStyle(.red).help("The disk holding this game is not connected: \(url.path)")
+                    }
                     Spacer(minLength: 8)
                     if let size = game.sizeOnDisk, game.downloadProgress == nil {
                         Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)).font(.caption).foregroundStyle(.secondary)
@@ -257,6 +266,11 @@ struct GameCard: View {
                         if model.hasUpdater(game) { Button("Update game") { model.play(game, update: true) } }
                         Button("Diagnose…") { model.diagnose(game) }
                         Button("Copy recipe to share") { model.copyRecipe(game) }
+                        if case .thisMac = model.location(of: game) {
+                            Button("Move to another disk…") { model.moveToAnotherDisk(game) }
+                        } else {
+                            Button("Move back to this Mac") { model.moveBack(game) }
+                        }
                         Divider()
                         Button("Uninstall…", role: .destructive) { model.askUninstall(game) }
                     } label: { Image(systemName: "ellipsis.circle") }
@@ -831,5 +845,90 @@ struct LogsView: View {
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
             }
         }
+    }
+}
+
+
+// MARK: - Disk
+
+struct DiskView: View {
+    @Environment(AppModel.self) private var model
+    @State private var toClean: Reclaimable?
+
+    private func size(_ bytes: Int64) -> String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                if let report = model.diskReport {
+                    if let space = report.space {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("\(size(space.free)) free of \(size(space.total))").font(.title3.bold())
+                            ProgressView(value: Double(space.total - space.free), total: Double(max(space.total, 1)))
+                                .tint(space.isLow ? .orange : .accentColor)
+                        }
+                    }
+                    GroupBox("Stirred") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            row("Games on this Mac", size(report.gamesOnThisMac))
+                            row("Games on other disks", size(report.gamesOnOtherDisks))
+                            row("Engine and components", size(report.engine))
+                        }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    GroupBox("Can be cleaned") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            if report.reclaimable.isEmpty { Text("Nothing to clean.").foregroundStyle(.secondary) }
+                            ForEach(report.reclaimable) { item in
+                                HStack(alignment: .top) {
+                                    VStack(alignment: .leading) {
+                                        Text("\(item.title) · \(size(item.bytes))").bold()
+                                        Text(item.detail).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Button("Clean…") { toClean = item }.disabled(model.diskBusy)
+                                }
+                            }
+                        }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    GroupBox("Games") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(model.games) { game in
+                                HStack {
+                                    Text(game.name)
+                                    Spacer()
+                                    Text(game.sizeOnDisk.map(size) ?? "").foregroundStyle(.secondary)
+                                    switch model.location(of: game) {
+                                    case .thisMac:
+                                        Button("Move to another disk…") { model.moveToAnotherDisk(game) }.disabled(model.phases[game.id] != nil)
+                                    case .external:
+                                        Button("Move back") { model.moveBack(game) }.disabled(model.phases[game.id] != nil)
+                                    case .missing:
+                                        Label("Disk not connected", systemImage: "externaldrive.badge.xmark").foregroundStyle(.red)
+                                    }
+                                    if let phase = model.phases[game.id] { Text(phase).font(.caption).foregroundStyle(.secondary) }
+                                }
+                            }
+                            Text("A moved game stays in your Steam library and starts as before; plug the disk in before playing it.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                } else {
+                    ProgressView().frame(maxWidth: .infinity).padding(.top, 60)
+                }
+            }
+            .padding(24)
+        }
+        .navigationTitle("Disk")
+        .task { model.loadDiskReport() }
+        .toolbar { ToolbarItem { Button { model.loadDiskReport() } label: { Label("Refresh", systemImage: "arrow.clockwise") }.disabled(model.diskBusy) } }
+        .confirmationDialog("Clean \(toClean?.title ?? "")?", isPresented: Binding(get: { toClean != nil }, set: { if !$0 { toClean = nil } }),
+                            titleVisibility: .visible, presenting: toClean) { item in
+            Button("Clean (\(size(item.bytes)))", role: .destructive) { model.clean(item) }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text($0.detail) }
+    }
+
+    private func row(_ title: String, _ value: String) -> some View {
+        HStack { Text(title); Spacer(); Text(value).foregroundStyle(.secondary) }
     }
 }

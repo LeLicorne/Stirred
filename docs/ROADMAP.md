@@ -13,7 +13,7 @@ Ideas ordered from most to least valuable (product/UX view). Status: **Done**, *
 | 7 | Pre-launch tasks in recipes (Warframe launcher update as an "Update" button) | Done (Warframe only) | Recipe `updater` + "Update game" menu item + `stirredctl update <game>`; replaces `Scripts/setup-warframe-launcher.sh`. Generic pre-launch tasks not done |
 | 8 | Community recipes + anonymous "report result" | Done (offline part) | Export / import of recipe files with strict validation, imported recipes win over bundled ones. Not done: automatic fetching from a hosted repository, anonymous result reports (need a public repo and a privacy design first) |
 | 9 | Other stores (GOG first, then Epic via Legendary) | Queued | Plug into `GameStoreProvider`; one store at a time, each is fragile |
-| 10 | Disk management: size per game, move to an external disk, low-space alert | Partly | Size is shown on cards; uninstall is done |
+| 10 | Disk management: size per game, move to an external disk, low-space alert | Done | Disk section (free space, what Stirred uses, safe cleanup), low-space banner, move a game to another disk and back (`stirredctl disk`, `stirredctl move`) |
 | 11 | Auto-update of engine and components with rollback | Queued | Keeps Stirred alive as Wine/DXVK move; pin versions by SHA-256 as setup does |
 | 12 | Controller navigation, full screen, menu-bar mode | Queued | |
 

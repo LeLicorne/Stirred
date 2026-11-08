@@ -12,11 +12,13 @@ public enum UninstallError: Error, CustomStringConvertible, Sendable {
     case notInstalled
     case unsafePath(String)
     case gameRunning
+    case movedToAnotherDisk
 
     public var description: String {
         switch self {
         case .notInstalled: "This game has no install folder."
         case .unsafePath(let path): "Refusing to delete \(path): it is not a game folder inside Steam's steamapps/common."
+        case .movedToAnotherDisk: "This game was moved to another disk. Move it back to this Mac first, then uninstall it."
         case .gameRunning: "The game is still running. Stop it first."
         }
     }
@@ -29,6 +31,7 @@ public enum Uninstaller {
             throw UninstallError.unsafePath("only Steam games can be uninstalled here")
         }
         guard let folder = game.installDirectory else { throw UninstallError.notInstalled }
+        if GameMover.isLink(folder) { throw UninstallError.movedToAnotherDisk }
         let steamapps = steamRoot.appendingPathComponent("steamapps", isDirectory: true)
         let common = steamapps.appendingPathComponent("common", isDirectory: true).resolvingSymlinksInPath()
         // The game folder must be exactly one level below steamapps/common once symlinks are resolved:
