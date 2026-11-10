@@ -68,8 +68,8 @@ struct SetupView: View {
     var body: some View {
         VStack(spacing: 22) {
             VStack(spacing: 6) {
-                Image(systemName: "gamecontroller.fill").font(.system(size: 44)).foregroundStyle(.tint)
-                Text("Welcome to Stirred").font(.largeTitle.bold())
+                Image(systemName: "gamecontroller.fill").zfont(44).foregroundStyle(.tint)
+                Text("Welcome to Stirred").zfont(26, .bold)
                 Text("Play your Windows Steam games on this Mac. A one-time setup installs what is needed (about 300 MB).")
                     .foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
@@ -78,10 +78,10 @@ struct SetupView: View {
                 ForEach(model.setupItems) { item in
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: item.done ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(item.done ? Color.green : Color.secondary).font(.title3)
+                            .foregroundStyle(item.done ? Color.green : Color.secondary).zfont(15)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(item.step.title).font(.headline)
-                            Text(item.step.summary).font(.caption).foregroundStyle(.secondary)
+                            Text(item.step.title).zfont(13, .bold)
+                            Text(item.step.summary).zfont(10).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -96,18 +96,18 @@ struct SetupView: View {
             if model.setupBusy {
                 VStack(spacing: 8) {
                     ProgressView()
-                    Text(model.setupMessage ?? "").font(.callout).foregroundStyle(.secondary)
+                    Text(model.setupMessage ?? "").zfont(12).foregroundStyle(.secondary)
                 }
             } else {
                 Button { model.runSetup() } label: {
                     Label(model.setupError == nil ? "Set up Stirred" : "Try again", systemImage: "arrow.down.circle.fill")
-                        .font(.title3).padding(.horizontal, 12)
+                        .zfont(15).padding(.horizontal, 12)
                 }
                 .buttonStyle(.borderedProminent).controlSize(.large)
             }
 
             Text("When it is done, a Steam window opens: sign in once, and your games appear in Stirred.")
-                .font(.caption).foregroundStyle(.secondary)
+                .zfont(10).foregroundStyle(.secondary)
         }
         .padding(40).frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -131,7 +131,7 @@ struct SteamStatusBar: View {
             Divider()
             HStack(spacing: 6) {
                 Circle().fill(label.color).frame(width: 9, height: 9)
-                Text(label.text).font(.callout)
+                Text(label.text).zfont(12)
             }
             HStack {
                 Button(model.steam == .stopped ? "Start Steam" : "Open Steam") { model.openSteamWindow() }
@@ -139,7 +139,7 @@ struct SteamStatusBar: View {
             }
             .controlSize(.small)
             if let engine = model.engineName {
-                Text(engine).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                Text(engine).zfont(9).foregroundStyle(.secondary).lineLimit(1)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -154,6 +154,7 @@ struct LibraryView: View {
     /// Smallest width of a card; the grid fits as many as the window allows. Slider in the toolbar, or pinch.
     @AppStorage("cardWidth") private var cardWidth: Double = 280
     @State private var pinchStart: Double?
+    @Environment(\.uiZoom) private var zoom
 
     var body: some View {
         ScrollView {
@@ -179,7 +180,7 @@ struct LibraryView: View {
                         description: Text("Open Steam, sign in and install a game. It shows up here automatically."))
                         .padding(.top, 60)
                 } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: cardWidth, maximum: cardWidth * 1.35), spacing: 18, alignment: .top)], spacing: 18) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: cardWidth * zoom, maximum: cardWidth * zoom * 1.35), spacing: 18, alignment: .top)], spacing: 18) {
                         ForEach(model.games) { GameCard(game: $0) }
                     }
                 }
@@ -269,7 +270,7 @@ struct GameCard: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(game.name).font(.headline).lineLimit(1)
+                    Text(game.name).zfont(13, .bold).lineLimit(1)
                     switch model.location(of: game) {
                     case .thisMac: EmptyView()
                     case .external(let url): Image(systemName: "externaldrive").foregroundStyle(.secondary).help("On another disk: \(url.path)")
@@ -277,9 +278,9 @@ struct GameCard: View {
                     }
                     Spacer(minLength: 8)
                     if let size = game.sizeOnDisk, game.downloadProgress == nil {
-                        Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)).font(.caption).foregroundStyle(.secondary)
+                        Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)).zfont(10).foregroundStyle(.secondary)
                     }
-                    Text(badge.text).font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 3)
+                    Text(badge.text).zfont(9, .bold).padding(.horizontal, 8).padding(.vertical, 3)
                         .background(badge.color.opacity(0.25), in: Capsule())
                     Menu {
                         if model.hasUpdater(game) { Button("Update game") { model.play(game, update: true) } }
@@ -299,7 +300,7 @@ struct GameCard: View {
                 }
                 // Fixed height so every card has the same size, with or without notes.
                 Text(recipe?.notes ?? "No notes yet. Play it once and Stirred will record how it ran.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .zfont(10).foregroundStyle(.secondary)
                     .lineLimit(3, reservesSpace: true)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
 
@@ -336,16 +337,16 @@ struct GameCard: View {
         if let progress = game.downloadProgress {
             VStack(alignment: .trailing, spacing: 4) {
                 ProgressView(value: progress).frame(width: 150)
-                Text("Downloading \(Int(progress * 100))%").font(.caption).foregroundStyle(.secondary)
+                Text("Downloading \(Int(progress * 100))%").zfont(10).foregroundStyle(.secondary)
             }
         } else if unsupported {
-            Text("Can't run on macOS").font(.caption).foregroundStyle(.red)
+            Text("Can't run on macOS").zfont(10).foregroundStyle(.red)
         } else if let phase {
             if phase == "Playing" || phase == "Updating" {
                 Button("Stop", role: .destructive) { model.stop(game) }
             } else {
                 ProgressView().controlSize(.small)
-                Text(phase).font(.caption).foregroundStyle(.secondary)
+                Text(phase).zfont(10).foregroundStyle(.secondary)
             }
         } else {
             Button { model.play(game) } label: { Label("Play", systemImage: "play.fill") }
@@ -371,22 +372,22 @@ struct DiagnosisSheet: View {
     var body: some View {
         if let state = model.diagnosis {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Diagnose \(state.game.name)").font(.title2.bold())
+                Text("Diagnose \(state.game.name)").zfont(17, .bold)
                 Text("What Stirred found out about the last runs and your setup. Fixes apply to this game only and last.")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .zfont(12).foregroundStyle(.secondary)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         ForEach(state.items) { item in
                             let (icon, color) = style(item.severity)
                             HStack(alignment: .top, spacing: 12) {
-                                Image(systemName: icon).foregroundStyle(color).font(.title3)
+                                Image(systemName: icon).foregroundStyle(color).zfont(15)
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(item.title).font(.headline)
-                                    Text(item.explanation).font(.callout).foregroundStyle(.secondary)
+                                    Text(item.title).zfont(13, .bold)
+                                    Text(item.explanation).zfont(12).foregroundStyle(.secondary)
                                         .fixedSize(horizontal: false, vertical: true)
                                     if let fix = item.fix {
                                         if state.busy == item.id {
-                                            HStack { ProgressView().controlSize(.small); Text(state.phase ?? "").font(.caption).foregroundStyle(.secondary) }
+                                            HStack { ProgressView().controlSize(.small); Text(state.phase ?? "").zfont(10).foregroundStyle(.secondary) }
                                         } else {
                                             Button(fix.label) { model.applyFix(item) }.buttonStyle(.borderedProminent).controlSize(.small)
                                                 .disabled(state.busy != nil)
@@ -453,7 +454,7 @@ struct AllGamesView: View {
                     Button("Open Steam") { model.openSteamWindow() }
                 } else {
                     Text(model.allGames.isEmpty ? "Reading your Steam library…" : "\(model.allGames.count) games you own, ranked by how likely they are to run")
-                        .font(.headline)
+                        .zfont(13, .bold)
                     HStack(spacing: 8) {
                         ForEach(levels, id: \.self) { level in
                             Toggle(isOn: Binding(get: { shown.contains(level) },
@@ -468,7 +469,7 @@ struct AllGamesView: View {
                         HStack(spacing: 10) {
                             ProgressView(value: Double(progress.done), total: Double(max(progress.total, 1))).frame(maxWidth: 260)
                             Text("Checking Steam store details \(progress.done)/\(progress.total): verdicts keep improving")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .zfont(10).foregroundStyle(.secondary)
                             Button("Stop") { model.stopRefining() }.controlSize(.small)
                         }
                     }
@@ -489,53 +490,61 @@ struct AllGamesView: View {
                 }
             }
             Text("Based on Steam's own data and Steam Deck status: a hint, not a promise. Tested games are marked Tested.")
-                .font(.caption2).foregroundStyle(.secondary).padding(8)
+                .zfont(9).foregroundStyle(.secondary).padding(8)
         }
         .navigationTitle("All my games")
         .task { if model.allGames.isEmpty { model.loadAllGames() } }
     }
 }
 
-/// App-wide zoom (⌘+ / ⌘- / ⌘0) for the content next to the sidebar: the layout is computed at the zoomed-out size,
-/// then scaled, so text and pictures stay sharp and everything grows together.
+/// App-wide zoom (⌘+ / ⌘- / ⌘0) for the content next to the sidebar. It scales text and the pictures that use `zoomed(_:)`, not
+/// the whole view: scaling a whole view broke clicks inside scroll views (the Play button stopped answering).
+struct UIZoomKey: EnvironmentKey { static let defaultValue: Double = 1 }
+extension EnvironmentValues { var uiZoom: Double { get { self[UIZoomKey.self] } set { self[UIZoomKey.self] = newValue } } }
+
 struct Zoomed: ViewModifier {
     @AppStorage("uiZoom") private var zoom: Double = 1
+    func body(content: Content) -> some View { content.environment(\.uiZoom, zoom) }
+}
 
+struct ZoomedFont: ViewModifier {
+    @Environment(\.uiZoom) private var zoom
+    let size: CGFloat, weight: Font.Weight, mono: Bool
     func body(content: Content) -> some View {
-        GeometryReader { geo in
-            content
-                .frame(width: geo.size.width / zoom, height: geo.size.height / zoom)
-                .scaleEffect(zoom, anchor: .topLeading)
-                .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
-        }
+        content.font(.system(size: size * zoom, weight: weight, design: mono ? .monospaced : .default))
     }
 }
 
-extension View { func zoomed() -> some View { modifier(Zoomed()) } }
+extension View {
+    func zoomed() -> some View { modifier(Zoomed()) }
+    /// Same as `.font` with a system text style's size, multiplied by the zoom.
+    func zfont(_ size: CGFloat, _ weight: Font.Weight = .regular, mono: Bool = false) -> some View { modifier(ZoomedFont(size: size, weight: weight, mono: mono)) }
+}
 
 struct AllGamesRow: View {
     @Environment(AppModel.self) private var model
     let entry: LibraryEntry
+    @Environment(\.uiZoom) private var zoom
 
     var body: some View {
         HStack(spacing: 14) {
             GameCover(appID: entry.appID, name: entry.name)
-                .frame(width: 150, height: 70).clipShape(RoundedRectangle(cornerRadius: 6))
+                .frame(width: 150 * zoom, height: 70 * zoom).clipShape(RoundedRectangle(cornerRadius: 6))
             VStack(alignment: .leading, spacing: 3) {
-                Text(entry.name).font(.headline).lineLimit(1)
+                Text(entry.name).zfont(13, .bold).lineLimit(1)
                 Text(entry.verdict.reasons.first ?? entry.verdict.headline)
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    .zfont(10).foregroundStyle(.secondary).lineLimit(2)
             }
             Spacer(minLength: 12)
-            Text(entry.verdict.level.title).font(.caption.bold()).padding(.horizontal, 8).padding(.vertical, 3)
+            Text(entry.verdict.level.title).zfont(10, .bold).padding(.horizontal, 8).padding(.vertical, 3)
                 .background(entry.verdict.level.color.opacity(0.25), in: Capsule())
             Group {
                 if entry.installed {
-                    Label("Installed", systemImage: "checkmark").font(.caption).foregroundStyle(.secondary)
+                    Label("Installed", systemImage: "checkmark").zfont(10).foregroundStyle(.secondary)
                 } else if let phase = model.installPhase[entry.appID] {
                     ProgressView().controlSize(.small).help(phase)
                 } else if entry.verdict.level == .native {
-                    Text("Use the Mac version").font(.caption).foregroundStyle(.secondary)
+                    Text("Use the Mac version").zfont(10).foregroundStyle(.secondary)
                 } else {
                     Button("Install") { model.installGame(appID: entry.appID) }.controlSize(.small)
                         .disabled(model.engineName == nil)
@@ -557,7 +566,7 @@ struct CheckView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Will this game run on your Mac?").font(.title2.bold())
+                    Text("Will this game run on your Mac?").zfont(17, .bold)
                     Text("Type a game name, or paste its Steam store link. Nothing is installed.").foregroundStyle(.secondary)
                 }
                 HStack {
@@ -611,23 +620,23 @@ struct VerdictCard: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 10))
             HStack {
-                Text(check.info.name).font(.title2.bold())
-                if check.info.isFree { Text("Free").font(.caption.bold()).padding(.horizontal, 8).padding(.vertical, 2)
+                Text(check.info.name).zfont(17, .bold)
+                if check.info.isFree { Text("Free").zfont(10, .bold).padding(.horizontal, 8).padding(.vertical, 2)
                     .background(.green.opacity(0.25), in: Capsule()) }
             }
             Label(check.verdict.headline, systemImage: style.icon)
-                .font(.headline).foregroundStyle(style.color)
+                .zfont(13, .bold).foregroundStyle(style.color)
                 .padding(10).frame(maxWidth: .infinity, alignment: .leading)
                 .background(style.color.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(check.verdict.reasons, id: \.self) { Text("\u{2022} \($0)").fixedSize(horizontal: false, vertical: true) }
             }
-            .font(.callout).foregroundStyle(.secondary)
+            .zfont(12).foregroundStyle(.secondary)
             HStack {
                 if check.installed {
                     Label("Already installed", systemImage: "checkmark").foregroundStyle(.secondary)
                 } else if let phase = model.installPhase[check.info.appID] {
-                    ProgressView().controlSize(.small); Text(phase).font(.caption).foregroundStyle(.secondary)
+                    ProgressView().controlSize(.small); Text(phase).zfont(10).foregroundStyle(.secondary)
                 } else {
                     Button { model.installGame(appID: check.info.appID) } label: {
                         Label(check.verdict.level == .no ? "Install anyway" : "Install", systemImage: "arrow.down.circle")
@@ -640,7 +649,7 @@ struct VerdictCard: View {
                 Link("Steam page", destination: URL(string: "https://store.steampowered.com/app/\(check.info.appID)")!)
             }
             Text("Steam shows its own \u{201C}Install\u{201D} window: accept it there. The download then appears in your Library.")
-                .font(.caption).foregroundStyle(.secondary)
+                .zfont(10).foregroundStyle(.secondary)
         }
         .padding(18)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12))
@@ -663,11 +672,11 @@ struct ActivityView: View {
                     List(model.sessions, selection: $selected) { s in
                         VStack(alignment: .leading, spacing: 3) {
                             HStack(spacing: 6) {
-                                Text(s.title).font(.headline).lineLimit(1)
+                                Text(s.title).zfont(13, .bold).lineLimit(1)
                                 if s.crashed { Image(systemName: "exclamationmark.octagon.fill").foregroundStyle(.red) }
                             }
                             Text(s.startedAt, format: .dateTime.day().month().hour().minute())
-                                .font(.caption).foregroundStyle(.secondary)
+                                .zfont(10).foregroundStyle(.secondary)
                         }
                         .padding(.vertical, 2)
                         .tag(s)
@@ -701,8 +710,8 @@ struct Metric: View {
     let icon: String
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: icon).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.title3.weight(.semibold))
+            Label(title, systemImage: icon).zfont(10).foregroundStyle(.secondary)
+            Text(value).zfont(15, .semibold)
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
@@ -739,11 +748,11 @@ struct SessionDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(session.title).font(.title.bold())
+                    Text(session.title).zfont(22, .bold)
                     Text(session.startedAt, format: .dateTime.day().month().year().hour().minute()).foregroundStyle(.secondary)
                     Spacer()
                     Text(session.crashed ? "Crash detected" : "No crash")
-                        .font(.caption.bold()).padding(.horizontal, 10).padding(.vertical, 4)
+                        .zfont(10, .bold).padding(.horizontal, 10).padding(.vertical, 4)
                         .background((session.crashed ? Color.red : .green).opacity(0.25), in: Capsule())
                 }
 
@@ -786,9 +795,9 @@ struct SessionDetail: View {
                     }
 
                     Text("\(record.system.chip) · \(record.system.memoryGB) GB · macOS \(record.system.macOS)")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .zfont(10).foregroundStyle(.secondary)
                     Text("FPS are not recorded: turn on “FPS overlay” in the Library and take a screenshot.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .zfont(10).foregroundStyle(.secondary)
                 }
 
                 HStack {
@@ -802,7 +811,7 @@ struct SessionDetail: View {
                     }
                 }
                 DisclosureGroup("Full report (text)") {
-                    Text(fullReport).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    Text(fullReport).zfont(10, mono: true).textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
                 }
             }
@@ -863,7 +872,7 @@ struct LogsView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     Text(shown.isEmpty ? "(nothing to show)" : shown)
-                        .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                        .zfont(10, mono: true).textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading).padding(12)
                     Color.clear.frame(height: 1).id("end")
                 }
@@ -900,7 +909,7 @@ struct DiskView: View {
                 if let report = model.diskReport {
                     if let space = report.space {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("\(size(space.free)) free of \(size(space.total))").font(.title3.bold())
+                            Text("\(size(space.free)) free of \(size(space.total))").zfont(15, .bold)
                             ProgressView(value: Double(space.total - space.free), total: Double(max(space.total, 1)))
                                 .tint(space.isLow ? .orange : .accentColor)
                         }
@@ -919,7 +928,7 @@ struct DiskView: View {
                                 HStack(alignment: .top) {
                                     VStack(alignment: .leading) {
                                         Text("\(item.title) · \(size(item.bytes))").bold()
-                                        Text(item.detail).font(.caption).foregroundStyle(.secondary)
+                                        Text(item.detail).zfont(10).foregroundStyle(.secondary)
                                     }
                                     Spacer()
                                     Button("Clean…") { toClean = item }.disabled(model.diskBusy)
@@ -930,11 +939,11 @@ struct DiskView: View {
                     GroupBox("Game settings and saves") {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Stirred copies your games' settings, controls and save files after each game and before risky changes (engine switch, uninstall, move). Copies are instant and take almost no space.")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .zfont(10).foregroundStyle(.secondary)
                             ForEach(backups.prefix(8)) { backup in
                                 HStack {
                                     Text(backup.date.formatted(date: .abbreviated, time: .shortened))
-                                    Text(backup.reason.rawValue).font(.caption).foregroundStyle(.secondary)
+                                    Text(backup.reason.rawValue).zfont(10).foregroundStyle(.secondary)
                                     Spacer()
                                     Button("Restore…") { toRestore = backup }.disabled(model.steam != .stopped)
                                 }
@@ -946,8 +955,8 @@ struct DiskView: View {
                                     backupMessage = launcher.backupGameData(.manual) == nil ? "Nothing new to save." : "Saved."
                                     backups = launcher.backups.list()
                                 }
-                                if let backupMessage { Text(backupMessage).font(.caption).foregroundStyle(.secondary) }
-                                if model.steam != .stopped { Text("Close Steam to restore.").font(.caption).foregroundStyle(.secondary) }
+                                if let backupMessage { Text(backupMessage).zfont(10).foregroundStyle(.secondary) }
+                                if model.steam != .stopped { Text("Close Steam to restore.").zfont(10).foregroundStyle(.secondary) }
                             }
                         }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -966,11 +975,11 @@ struct DiskView: View {
                                     case .missing:
                                         Label("Disk not connected", systemImage: "externaldrive.badge.xmark").foregroundStyle(.red)
                                     }
-                                    if let phase = model.phases[game.id] { Text(phase).font(.caption).foregroundStyle(.secondary) }
+                                    if let phase = model.phases[game.id] { Text(phase).zfont(10).foregroundStyle(.secondary) }
                                 }
                             }
                             Text("A moved game stays in your Steam library and starts as before; plug the disk in before playing it.")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .zfont(10).foregroundStyle(.secondary)
                         }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
                     }
                 } else {
@@ -1014,7 +1023,7 @@ struct EngineView: View {
                 let status = model.engineStatus
                 GroupBox("In use") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(status?.active?.name ?? "No engine").font(.title3.bold())
+                        Text(status?.active?.name ?? "No engine").zfont(15, .bold)
                         if let previous = status?.previous {
                             HStack {
                                 Text("Previous engine kept: \(previous)").foregroundStyle(.secondary)
@@ -1031,7 +1040,7 @@ struct EngineView: View {
                             HStack(alignment: .top) {
                                 VStack(alignment: .leading) {
                                     Text("Wine \(release.version)").bold()
-                                    Text(release.notes ?? "Tested by Stirred.").font(.caption).foregroundStyle(.secondary)
+                                    Text(release.notes ?? "Tested by Stirred.").zfont(10).foregroundStyle(.secondary)
                                 }
                                 Spacer()
                                 Button("Install and switch") { model.updateEngine(release) }.disabled(model.engineBusy != nil)
@@ -1039,10 +1048,10 @@ struct EngineView: View {
                         }
                         if let busy = model.engineBusy { HStack { ProgressView().controlSize(.small); Text(busy) } }
                         Text("Before switching, Stirred saves the Windows environment, closes Steam, checks the new engine and goes back by itself if it fails. Your games and saves are not touched.")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .zfont(10).foregroundStyle(.secondary)
                         HStack {
                             Button("Check for newer Wine builds online") { model.checkUpstream() }
-                            if let note = model.upstreamNote { Text(note).font(.caption).foregroundStyle(.secondary) }
+                            if let note = model.upstreamNote { Text(note).zfont(10).foregroundStyle(.secondary) }
                         }
                     }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
                 }
