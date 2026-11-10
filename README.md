@@ -92,7 +92,7 @@ swift build && .build/debug/stirredctl doctor          # what is installed, what
 
 ## For developers
 
-- Architecture and data layout: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- How Stirred works (diagrams, play flow, engines, safety nets, glossary): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Current status and next steps: [docs/PROGRESS.md](docs/PROGRESS.md)
 - Third-party components and licenses: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)
 - Tests: `swift test -j 4`. Per-game knowledge lives in `recipes/steam/<appid>.json`.
