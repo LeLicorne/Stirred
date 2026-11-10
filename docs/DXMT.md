@@ -36,3 +36,9 @@ Manual test without Stirred's app (separate data folder, optional):
     STIRRED_ROOT=<copy of your data> .build/debug/stirredctl run "rv there" --hud --keep-steam
 
 Wine and DXMT are LGPL: the patch and script are the corresponding source for the rebuilt `winemac.so`.
+
+## Cursor stays hidden while a game controls the mouse
+
+`Patches/dxmt/cursor-stay-hidden.patch` (applied by the build script): Wine's Mac driver brought the cursor back whenever no Wine window was
+under the pointer (while a game recentres the mouse, or when a notification or the overlay passes). Now a cursor the game hid stays hidden while
+the app is active; it returns when the game shows it or when you switch to another app. Only the `-dxmt` engine has it.

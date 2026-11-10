@@ -1,0 +1,15 @@
+--- a/dlls/winemac.drv/cocoa_app.m	2026-11-10 21:29:30
++++ b/dlls/winemac.drv/cocoa_app.m	2026-11-10 21:29:30
+@@ -954,7 +954,11 @@
+                 [[NSCursor arrowCursor] set];
+                 cursorIsCurrent = FALSE;
+             }
+-            if (cursorHidden)
++            /* Stirred: a game that hid the cursor has taken control of the mouse. Do not bring the cursor back just because
++               no Wine window is under the pointer right now (it happens while the game recentres the mouse, or when a
++               notification or the Steam overlay passes by). It comes back when the game shows it, or when the app is
++               no longer the active one. */
++            if (cursorHidden && !(clientWantsCursorHidden && [NSApp isActive]))
+             {
+                 [NSCursor unhide];
+                 cursorHidden = FALSE;
