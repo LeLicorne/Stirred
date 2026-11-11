@@ -1,0 +1,8 @@
+{
+ "appid": 4126040,
+ "name": "Aniimo",
+ "status": "experimental",
+ "verified": false,
+ "graphics": "dxmt",
+ "notes": "Unity (IL2CPP), 64-bit, uses NVIDIA Streamline. With DXVK + MoltenVK it fails at start-up ('Failed to initialize graphics'): the game needs Direct3D feature level 11.1, which DXVK-macOS cannot report, so Unity falls back to DirectX 12 and fails. With the optional DXMT engine the Direct3D 11 device is created, Streamline start-up fails harmlessly ('continuing without Streamline') and the game reaches its own patch window (2026-11-11, M4 16 GB). Whether it is playable (rendering, online) is not verified yet. The game ships a 'repair.exe' and an anti-tamper component (NEP2.dll): online play may be refused."
+}
