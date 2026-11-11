@@ -344,6 +344,10 @@ struct GameCard: View {
         } else if let phase {
             if phase == "Playing" || phase == "Updating" {
                 Button("Stop", role: .destructive) { model.stop(game) }
+                    .help("Asks the game to quit; force-quits it after a few seconds if it does not")
+                Button("Force quit") { model.forceQuit(game) }
+                    .buttonStyle(.borderless).foregroundStyle(.red)
+                    .help("Kills the game immediately (use it when it is stuck behind an error window)")
             } else {
                 ProgressView().controlSize(.small)
                 Text(phase).zfont(10).foregroundStyle(.secondary)

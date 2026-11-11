@@ -495,9 +495,16 @@ final class AppModel {
         }
     }
 
+    /// Asks the game to quit; if it is still running a few seconds later (error dialog, hung window) it is force-quit.
     func stop(_ game: Game) {
         let launcher = self.launcher
-        Task.detached { launcher.stopGame(game) }
+        Task.detached { await launcher.stopGameEscalating(game) }
+    }
+
+    /// Kills the game right away.
+    func forceQuit(_ game: Game) {
+        let launcher = self.launcher
+        Task.detached { launcher.forceStopGame(game) }
     }
 
     func startSteam() {

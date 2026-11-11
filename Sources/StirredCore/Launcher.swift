@@ -390,6 +390,29 @@ public struct Launcher: Sendable {
         }
     }
 
+    /// Kills the game and everything started from its folder without letting it answer (SIGKILL). For a game stuck behind an
+    /// error dialog or a hung window, where a normal stop is ignored.
+    public func forceStopGame(_ game: Game) {
+        for pattern in Self.stopPatterns(for: game, needle: processNeedle(for: game)) {
+            _ = SystemSampler.run("/usr/bin/pkill", ["-9", "-f", pattern])
+        }
+    }
+
+    /// Stop, then force-quit if the game is still there after `grace` seconds. Returns true if it had to be forced.
+    @discardableResult
+    public func stopGameEscalating(_ game: Game, grace: TimeInterval = 4) async -> Bool {
+        stopGame(game)
+        let needle = processNeedle(for: game)
+        let deadline = Date().addingTimeInterval(grace)
+        while Date() < deadline {
+            if SystemSampler.sample(processNeedle: needle, at: 0).processCount == 0 { return false }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+        }
+        guard SystemSampler.sample(processNeedle: needle, at: 0).processCount > 0 else { return false }
+        forceStopGame(game)
+        return true
+    }
+
     /// `pkill -f` regular expressions: the exe name, anything under `\common\<folder>\`, and Ubisoft's launcher
     /// for games that use it.
     public static func stopPatterns(for game: Game, needle: String) -> [String] {
