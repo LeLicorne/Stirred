@@ -1,0 +1,35 @@
+--- a/dlls/winemac.drv/macdrv.h
++++ b/dlls/winemac.drv/macdrv.h
+@@ -243,6 +243,7 @@
+     unsigned int        per_pixel_alpha : 1;    /* is window using per-pixel alpha? */
+     unsigned int        minimized : 1;          /* is window minimized? */
+     unsigned int        fullscreen : 1;         /* is the window visible rect fullscreen? (unrelated to native AppKit/Cocoa fullscreen) */
++    unsigned int        dxmt_view : 1;          /* client_view was created for DXMT: its frame follows the client rect */
+ };
+ 
+ struct macdrv_client_surface
+--- a/dlls/winemac.drv/window.c
++++ b/dlls/winemac.drv/window.c
+@@ -1583,6 +1583,14 @@
+ }
+ 
+ 
++/* DXMT: keep the Metal view on the window's client area (frame in screen coordinates, like the views Wine creates itself). */
++static void dxmt_sync_client_view(struct macdrv_win_data *data)
++{
++    if (data->client_view && data->dxmt_view)
++        macdrv_set_view_frame(data->client_view, cgrect_from_rect(data->rects.client));
++}
++
++
+ /***********************************************************************
+  *              WindowPosChanging   (MACDRV.@)
+  */
+@@ -1644,6 +1652,7 @@
+ 
+     old_rects = data->rects;
+     data->rects = *new_rects;
++    dxmt_sync_client_view(data);
+ 
+     TRACE("win %p/%p new_rects %s style %08x flags %08x surface %p\n", hwnd, data->cocoa_window,
+           debugstr_window_rects(new_rects), new_style, swp_flags, surface);
