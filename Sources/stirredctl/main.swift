@@ -122,7 +122,7 @@ func run() async throws {
         if args.count > 2 {
             let names: [String: QualityPreset?] = ["faster": .performance, "balanced": .balanced, "prettier": .quality, "default": nil]
             guard let chosen = names[args[2].lowercased()] else { fail("preset must be faster, balanced, prettier or default") }
-            try launcher.overrides.update(game.steamAppID ?? 0) { $0.preset = chosen }
+            try launcher.overrides.update(game.key) { $0.preset = chosen }
         }
         let current = launcher.preset(for: game)
         print("\(game.name): \(current?.title ?? "no preset (recipe defaults)")   recommended for this Mac: \(PresetCatalog.recommended(for: .current).title)")

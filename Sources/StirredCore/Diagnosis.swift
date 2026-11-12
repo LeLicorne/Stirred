@@ -225,14 +225,14 @@ extension Launcher {
 
     /// Applies one fix. Settings are saved as personal overrides, so they last.
     public func apply(_ fix: DiagnosisFix, to game: Game, onPhase: @escaping @Sendable (String) -> Void = { _ in }) async throws {
-        let appID = game.steamAppID ?? 0
+        let key = game.key
         switch fix {
         case .runSetup:
             try await setup.run(onProgress: onPhase)
         case .addLaunchArgument(let argument):
-            try overrides.update(appID) { $0.launchArgs = ($0.launchArgs ?? []) + [argument] }
+            try overrides.update(key) { $0.launchArgs = ($0.launchArgs ?? []) + [argument] }
         case .setLaunchMode(let mode):
-            try overrides.update(appID) { $0.launchMode = mode }
+            try overrides.update(key) { $0.launchMode = mode }
         case .reinstallGraphics:
             onPhase("Reinstalling the graphics layer…")
             try await prepareGraphics(for: game, plan: plan(for: game), options: LaunchOptions())

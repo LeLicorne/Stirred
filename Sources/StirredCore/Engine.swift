@@ -56,6 +56,10 @@ public enum EngineLocator {
     /// Name of the engine the running Steam was started with (Steam and the games it launches share one Wine).
     public static let steamEngineFile = "steam-engine.txt"
 
+    /// Same idea for any Windows environment: each prefix has its own wineserver, so each remembers its own engine.
+    /// Steam keeps its historical file name.
+    public static func sessionFile(forPrefix name: String) -> String { name == "steam" ? steamEngineFile : "session-\(name).txt" }
+
     public static func preferred(paths: StirredPaths = StirredPaths()) -> Engine? {
         // Debug/experiments: STIRRED_ENGINE=<directory name under engines/> forces a specific engine.
         if let name = ProcessInfo.processInfo.environment["STIRRED_ENGINE"] {

@@ -25,4 +25,11 @@ public struct StirredPaths: Sendable {
     public func prefix(named name: String) -> URL {
         prefixes.appendingPathComponent(name, isDirectory: true)
     }
+
+    /// Windows environments that exist on disk, `steam` first (the other folder in `prefixes/` holds engine snapshots).
+    public func existingPrefixNames() -> [String] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: prefixes.path)) ?? []
+        let found = names.filter { $0 != "snapshots" && !$0.hasPrefix(".") && FileManager.default.fileExists(atPath: prefixes.appendingPathComponent($0).appendingPathComponent("drive_c").path) }
+        return found.sorted { ($0 == "steam" ? 0 : 1, $0) < ($1 == "steam" ? 0 : 1, $1) }
+    }
 }

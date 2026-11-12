@@ -18,9 +18,18 @@ public struct Game: Sendable, Equatable, Identifiable {
 /// Each store (Steam now; Epic, GOG, Ubisoft later) plugs in here.
 public protocol GameStoreProvider: Sendable {
     var storeName: String { get }
+    /// True when the store's client (or tool) is set up in its Windows environment.
     var isInstalled: Bool { get }
+    /// True when an account is signed in (the sign-in itself always happens on the store's own page).
+    var isSignedIn: Bool { get }
     func installedGames() throws -> [Game]
     func launch(_ game: Game, plan: LaunchPlan) throws -> Process
+}
+
+extension GameStoreProvider {
+    public var displayName: String { Stores.displayName(storeName) }
+    /// Name of the Windows environment (prefix) this store's games live in.
+    public var prefixName: String { Stores.prefixName(forStore: storeName) }
 }
 
 public struct SteamProvider: GameStoreProvider {
@@ -39,6 +48,8 @@ public struct SteamProvider: GameStoreProvider {
     }
 
     public var storeName: String { "steam" }
+
+    public var isSignedIn: Bool { hasRememberedLogin }
 
     public var steamRoot: URL {
         runner.prefix.appendingPathComponent("drive_c/Program Files (x86)/Steam", isDirectory: true)

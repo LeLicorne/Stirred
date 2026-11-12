@@ -1472,3 +1472,109 @@ struct PresetTests {
         #expect((0...1).contains(CoverSources.fallbackHue(for: "RV There Yet?")))
     }
 }
+
+@Suite struct MultiStoreFoundationTests {
+    private func tempRoot() -> StirredPaths {
+        StirredPaths(root: FileManager.default.temporaryDirectory.appendingPathComponent("stirred-multi-\(UUID().uuidString)"))
+    }
+
+    @Test func gameKeyNeverLeavesItsFolder() {
+        #expect(GameKey.steam(3949040).path == "steam/3949040")
+        #expect(GameKey.steam(3949040).steamAppID == 3949040)
+        #expect(GameKey(store: "epic", id: "Salt").path == "epic/Salt")
+        #expect(GameKey(store: "epic", id: "Salt").steamAppID == nil)
+        #expect(GameKey(store: "epic", id: "../../etc/passwd").path == "epic/.._.._etc_passwd")
+        #expect(GameKey(store: "gog", id: "..").id == "_")
+        #expect(GameKey(store: "x", id: "").id == "_")
+        let game = Game(store: "gog", storeID: "1207658930", name: "Witcher", installDirectory: nil)
+        #expect(game.key == GameKey(store: "gog", id: "1207658930"))
+    }
+
+    @Test func personalSettingsAreFiledPerStoreAndSteamKeepsItsPlace() throws {
+        let paths = tempRoot()
+        let store = OverrideStore(paths: paths)
+        try store.update(3949040) { $0.preset = .performance }              // the Int API still means Steam
+        #expect(FileManager.default.fileExists(atPath: paths.root.appendingPathComponent("overrides/steam/3949040.json").path))
+        #expect(store.read(.steam(3949040)).preset == .performance)
+        try store.update(GameKey(store: "epic", id: "Salt")) { $0.launchArgs = ["-windowed"] }
+        #expect(FileManager.default.fileExists(atPath: paths.root.appendingPathComponent("overrides/epic/Salt.json").path))
+        #expect(store.read(GameKey(store: "epic", id: "Salt")).launchArgs == ["-windowed"])
+        #expect(store.read(GameKey(store: "gog", id: "Salt")).isEmpty)
+        let epic = Game(store: "epic", storeID: "Salt", name: "Salt", installDirectory: nil)
+        let merged = try #require(store.apply(to: nil, game: epic))
+        #expect(merged.store == "epic" && merged.gameId == "Salt" && merged.launchArgs == ["-windowed"])
+        try store.reset(GameKey(store: "epic", id: "Salt"))
+        #expect(store.read(GameKey(store: "epic", id: "Salt")).isEmpty)
+    }
+
+    @Test func recipesOfOtherStoresAreFoundImportedFirst() throws {
+        let paths = tempRoot()
+        let bundled = paths.root.appendingPathComponent("bundled"), user = paths.root.appendingPathComponent("user")
+        for (dir, name) in [(bundled, "Bundled"), (user, "Imported")] {
+            let folder = dir.appendingPathComponent("epic")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            if dir == bundled || name == "Imported" {
+                try #"{"appid": 0, "store": "epic", "game_id": "Salt", "name": "\#(name)", "status": "playable", "verified": false}"#
+                    .write(to: folder.appendingPathComponent("Salt.json"), atomically: true, encoding: .utf8)
+            }
+        }
+        let repo = RecipeRepository(directory: bundled, userDirectory: user)
+        let recipe = try #require(repo.recipe(for: GameKey(store: "epic", id: "Salt")))
+        #expect(recipe.name == "Imported" && recipe.store == "epic" && recipe.gameId == "Salt")
+        #expect(RecipeRepository(directory: bundled).recipe(for: GameKey(store: "epic", id: "Salt"))?.name == "Bundled")
+        #expect(repo.recipe(for: GameKey(store: "epic", id: "Nothing")) == nil)
+    }
+
+    @Test func environmentsAndTheirEngineMarkers() {
+        #expect(Stores.prefixName(forStore: "steam") == "steam")
+        #expect(Stores.prefixName(forStore: "epic") == "games" && Stores.prefixName(forStore: "gog") == "games")
+        #expect(Stores.prefixName(forStore: "ubisoft") == "ubisoft")
+        #expect(EngineLocator.sessionFile(forPrefix: "steam") == "steam-engine.txt")
+        #expect(EngineLocator.sessionFile(forPrefix: "games") == "session-games.txt")
+        #expect(Stores.displayName("epic") == "Epic Games")
+    }
+
+    @Test func eachEnvironmentRemembersItsOwnEngine() throws {
+        let paths = tempRoot()
+        for name in ["stirred-wine-11.21", "stirred-wine-11.21-dxmt"] {
+            let bin = paths.engines.appendingPathComponent("\(name)/bin")
+            try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+            let wine = bin.appendingPathComponent("wine")
+            try "#!/bin/sh\n".write(to: wine, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wine.path)
+        }
+        let launcher = Launcher(paths: paths, recipesDirectory: paths.root, resourcesDirectory: paths.root)
+        try ActiveEngine.write(paths, EngineLocator.sessionFile(forPrefix: "games"), value: "stirred-wine-11.21-dxmt")
+        #expect(try launcher.engine(forPrefix: "games").isDXMT)
+        #expect(try !launcher.engine().isDXMT)                       // Steam's environment is not affected
+        #expect(try !launcher.engine(forPrefix: "ubisoft").isDXMT)
+        let runner = try launcher.runner(forStore: "epic")
+        #expect(runner.prefix.lastPathComponent == "games")
+    }
+
+    @Test func backupsAndSnapshotsCoverEveryEnvironment() throws {
+        let paths = tempRoot()
+        for (prefix, file, text) in [("steam", "AppData/Local/Ride/input.ini", "steam controls"), ("games", "AppData/Local/Salt/save.dat", "epic save")] {
+            let folder = paths.prefix(named: prefix).appendingPathComponent("drive_c/users/me/" + (file as NSString).deletingLastPathComponent)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try text.write(to: folder.appendingPathComponent((file as NSString).lastPathComponent), atomically: true, encoding: .utf8)
+            try "reg \(prefix)".write(to: paths.prefix(named: prefix).appendingPathComponent("system.reg"), atomically: true, encoding: .utf8)
+        }
+        #expect(paths.existingPrefixNames() == ["steam", "games"])
+        let backup = GameDataBackup(paths: paths)
+        let info = try #require(try backup.take(reason: .manual))
+        #expect(info.items.contains("drive_c/users/me/AppData/Local/Ride"))
+        #expect(info.items.contains("@games/drive_c/users/me/AppData/Local/Salt"))
+        let epicSave = paths.prefix(named: "games").appendingPathComponent("drive_c/users/me/AppData/Local/Salt/save.dat")
+        try FileManager.default.removeItem(at: epicSave.deletingLastPathComponent())
+        try backup.restore(info.name)
+        #expect(try String(contentsOf: epicSave, encoding: .utf8) == "epic save")
+
+        try PrefixSnapshot.take(paths, engine: "stirred-wine-11.21")
+        try "changed".write(to: paths.prefix(named: "games").appendingPathComponent("system.reg"), atomically: true, encoding: .utf8)
+        try "changed".write(to: paths.prefix(named: "steam").appendingPathComponent("system.reg"), atomically: true, encoding: .utf8)
+        try PrefixSnapshot.restore(paths, engine: "stirred-wine-11.21")
+        #expect(try String(contentsOf: paths.prefix(named: "games").appendingPathComponent("system.reg"), encoding: .utf8) == "reg games")
+        #expect(try String(contentsOf: paths.prefix(named: "steam").appendingPathComponent("system.reg"), encoding: .utf8) == "reg steam")
+    }
+}

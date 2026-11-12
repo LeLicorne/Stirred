@@ -28,14 +28,32 @@ public struct GameDataBackup: Sendable {
     public init(paths: StirredPaths) { self.paths = paths }
 
     public var directory: URL { paths.root.appendingPathComponent("backups", isDirectory: true) }
-    private var prefix: URL { paths.prefix(named: "steam") }
+    /// Items of the Steam environment are stored as before (relative to it); items of another environment are `@<name>/<relative path>`.
+    private func location(of item: String) -> URL {
+        if item.hasPrefix("@"), let slash = item.firstIndex(of: "/") {
+            return paths.prefix(named: String(item[item.index(after: item.startIndex)..<slash]))
+                .appendingPathComponent(String(item[item.index(after: slash)...]))
+        }
+        return paths.prefix(named: "steam").appendingPathComponent(item)
+    }
 
     static let skippedLocal: Set<String> = ["steam", "temp", "crashdumps", "d3dscache", "microsoft", "packages", "wine", "programs"]
     static let skippedRoaming: Set<String> = ["microsoft"]
 
-    /// What gets saved, relative to the prefix (only what exists).
+    /// What gets saved from every Windows environment (only what exists).
     func items() -> [String] {
+        var result: [String] = []
+        for name in paths.existingPrefixNames() {
+            let tag = name == "steam" ? "" : "@\(name)/"
+            result += items(inPrefix: name).map { tag + $0 }
+        }
+        return result.sorted()
+    }
+
+    /// What gets saved from one environment, relative to it.
+    private func items(inPrefix name: String) -> [String] {
         let fm = FileManager.default
+        let prefix = paths.prefix(named: name)
         var result: [String] = []
         let users = prefix.appendingPathComponent("drive_c/users", isDirectory: true)
         for user in (try? fm.contentsOfDirectory(atPath: users.path)) ?? [] where user != "Public" {
@@ -52,13 +70,13 @@ public struct GameDataBackup: Sendable {
         }
         let userdata = "drive_c/Program Files (x86)/Steam/userdata"
         if fm.fileExists(atPath: prefix.appendingPathComponent(userdata).path) { result.append(userdata) }
-        return result.sorted()
+        return result
     }
 
     func fingerprint(of items: [String]) -> String {
         var newest = Date.distantPast, count = 0
         for item in items {
-            let root = prefix.appendingPathComponent(item)
+            let root = location(of: item)
             guard let walker = FileManager.default.enumerator(atPath: root.path) else { continue }
             if let a = try? FileManager.default.attributesOfItem(atPath: root.path), let d = a[.modificationDate] as? Date { newest = max(newest, d) }
             for case let rel as String in walker {
@@ -92,7 +110,7 @@ public struct GameDataBackup: Sendable {
         while FileManager.default.fileExists(atPath: directory.appendingPathComponent(name).path) { name = "\(formatter.string(from: now))-\(reason.rawValue)-\(n)"; n += 1 }
         let target = directory.appendingPathComponent(name, isDirectory: true)
         do {
-            for item in items { try PrefixSnapshot.clone(prefix.appendingPathComponent(item), target.appendingPathComponent("files/\(item)")) }
+            for item in items { try PrefixSnapshot.clone(location(of: item), target.appendingPathComponent("files/\(item)")) }
             let info = BackupInfo(name: name, reason: reason, date: now, items: items, fingerprint: print)
             let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601; encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(info).write(to: target.appendingPathComponent("manifest.json"))
@@ -114,7 +132,7 @@ public struct GameDataBackup: Sendable {
         guard let info = list().first(where: { $0.name == name }) else { throw BackupError.notFound(name) }
         try take(reason: .beforeRestore)
         for item in info.items {
-            let saved = directory.appendingPathComponent("\(name)/files/\(item)"), live = prefix.appendingPathComponent(item)
+            let saved = directory.appendingPathComponent("\(name)/files/\(item)"), live = location(of: item)
             guard FileManager.default.fileExists(atPath: saved.path) else { continue }
             try? FileManager.default.removeItem(at: live)
             try PrefixSnapshot.clone(saved, live)

@@ -282,7 +282,7 @@ final class AppModel {
     }
 
     func setPreset(_ preset: QualityPreset?, for game: Game) {
-        try? launcher.overrides.update(game.steamAppID ?? 0) { $0.preset = preset }
+        try? launcher.overrides.update(game.key) { $0.preset = preset }
         presetRevision += 1
     }
 
@@ -419,7 +419,7 @@ final class AppModel {
         let launcher = self.launcher
         Task.detached { [weak self] in
             let items = launcher.diagnose(game)
-            let overrides = game.steamAppID.map { !launcher.overrides.read($0).isEmpty } ?? false
+            let overrides = !launcher.overrides.read(game.key).isEmpty
             await MainActor.run { self?.diagnosis = DiagnosisState(game: game, items: items, hasOverrides: overrides) }
         }
     }
@@ -438,7 +438,7 @@ final class AppModel {
                 await MainActor.run {
                     self?.diagnosis?.items = items
                     self?.diagnosis?.done.insert(item.id)
-                    self?.diagnosis?.hasOverrides = game.steamAppID.map { !launcher.overrides.read($0).isEmpty } ?? false
+                    self?.diagnosis?.hasOverrides = !launcher.overrides.read(game.key).isEmpty
                 }
             } catch {
                 await MainActor.run { self?.diagnosis?.error = "\(error)" }
@@ -450,8 +450,8 @@ final class AppModel {
 
     /// Forgets the settings fixes added for this game (the recipe applies again).
     func resetSettings() {
-        guard let state = diagnosis, let appID = state.game.steamAppID else { return }
-        try? launcher.overrides.reset(appID)
+        guard let state = diagnosis else { return }
+        try? launcher.overrides.reset(state.game.key)
         diagnose(state.game)
     }
 

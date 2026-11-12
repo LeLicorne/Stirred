@@ -35,6 +35,9 @@ public struct GameUpdater: Codable, Sendable, Equatable {
 
 public struct Recipe: Codable, Sendable, Equatable {
     public var appid: Int
+    /// Other stores than Steam: `"store": "epic", "game_id": "Salt"` (`appid` is then 0). Absent means Steam.
+    public var store: String?
+    public var gameId: String?
     public var name: String
     public var status: CompatStatus
     /// True only once someone actually ran the game on a real machine.
@@ -59,8 +62,9 @@ public struct Recipe: Codable, Sendable, Equatable {
         blockers: [String]? = nil, graphics: GraphicsBackend? = nil,
         env: [String: String]? = nil, dllOverrides: [String: String]? = nil,
         launchArgs: [String]? = nil, latency: LatencyProfile? = nil, launchMode: LaunchMode? = nil, dxvkOptions: [String: String]? = nil, preset: QualityPreset? = nil, notes: String? = nil,
-        updater: GameUpdater? = nil
+        updater: GameUpdater? = nil, store: String? = nil, gameId: String? = nil
     ) {
+        self.store = store; self.gameId = gameId
         self.updater = updater
         self.appid = appid; self.name = name; self.status = status; self.verified = verified
         self.blockers = blockers; self.graphics = graphics; self.env = env
@@ -84,5 +88,17 @@ public struct RecipeRepository: Sendable {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return try? decoder.decode(Recipe.self, from: data)
+    }
+
+    /// A game of any store: `recipes/<store>/<id>.json`, imported ones first. Steam keeps its own lookup above.
+    public func recipe(for key: GameKey) -> Recipe? {
+        if let appID = key.steamAppID { return recipe(forSteamAppID: appID) }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        for base in [userDirectory, directory].compactMap({ $0 }) {
+            if let data = try? Data(contentsOf: base.appendingPathComponent("\(key.path).json")),
+               let recipe = try? decoder.decode(Recipe.self, from: data) { return recipe }
+        }
+        return nil
     }
 }

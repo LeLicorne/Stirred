@@ -84,24 +84,35 @@ public enum PrefixSnapshot {
         try SetupManager.runChecked("/bin/cp", ["-cR", from.path, to.path], what: "Copying \(from.lastPathComponent)")
     }
 
+    /// Steam's environment is saved at the top of the snapshot (as always); any other one in `@<name>/`.
+    private static func place(_ name: String, in snapshot: URL) -> URL {
+        name == "steam" ? snapshot : snapshot.appendingPathComponent("@\(name)", isDirectory: true)
+    }
+
     public static func take(_ paths: StirredPaths, engine: String) throws {
-        let prefix = paths.prefix(named: "steam"), target = directory(paths, engine: engine)
+        let target = directory(paths, engine: engine)
         try? FileManager.default.removeItem(at: target)
         do {
-            for item in items where FileManager.default.fileExists(atPath: prefix.appendingPathComponent(item).path) {
-                try clone(prefix.appendingPathComponent(item), target.appendingPathComponent(item))
+            for name in paths.existingPrefixNames() {
+                let prefix = paths.prefix(named: name), base = place(name, in: target)
+                for item in items where FileManager.default.fileExists(atPath: prefix.appendingPathComponent(item).path) {
+                    try clone(prefix.appendingPathComponent(item), base.appendingPathComponent(item))
+                }
             }
         } catch { try? FileManager.default.removeItem(at: target); throw error }
     }
 
     public static func restore(_ paths: StirredPaths, engine: String) throws {
-        let prefix = paths.prefix(named: "steam"), source = directory(paths, engine: engine)
+        let source = directory(paths, engine: engine)
         guard exists(paths, engine: engine) else { throw EngineUpdateError.noSnapshot(engine) }
-        for item in items {
-            let saved = source.appendingPathComponent(item), live = prefix.appendingPathComponent(item)
-            guard FileManager.default.fileExists(atPath: saved.path) else { continue }
-            try? FileManager.default.removeItem(at: live)
-            try clone(saved, live)
+        for name in paths.existingPrefixNames() {
+            let prefix = paths.prefix(named: name), base = place(name, in: source)
+            for item in items {
+                let saved = base.appendingPathComponent(item), live = prefix.appendingPathComponent(item)
+                guard FileManager.default.fileExists(atPath: saved.path) else { continue }
+                try? FileManager.default.removeItem(at: live)
+                try clone(saved, live)
+            }
         }
     }
 }

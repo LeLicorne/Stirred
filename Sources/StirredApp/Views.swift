@@ -155,10 +155,22 @@ struct LibraryView: View {
     @AppStorage("cardWidth") private var cardWidth: Double = 280
     @State private var pinchStart: Double?
     @Environment(\.uiZoom) private var zoom
+    /// "" = every store. Only shown once games from more than one store are installed.
+    @State private var storeFilter = ""
+
+    private var stores: [String] { Array(Set(model.games.map(\.store))).sorted() }
+    private var shownGames: [Game] { storeFilter.isEmpty ? model.games : model.games.filter { $0.store == storeFilter } }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                if stores.count > 1 {
+                    Picker("Store", selection: $storeFilter) {
+                        Text("All stores").tag("")
+                        ForEach(stores, id: \.self) { Text(Stores.displayName($0)).tag($0) }
+                    }
+                    .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 420)
+                }
                 if model.engineName == nil {
                     Banner(text: "No Wine engine found. Run Scripts/assemble-engine.sh, then relaunch.", color: .red)
                 }
@@ -181,7 +193,7 @@ struct LibraryView: View {
                         .padding(.top, 60)
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: cardWidth * zoom, maximum: cardWidth * zoom * 1.35), spacing: 18, alignment: .top)], spacing: 18) {
-                        ForEach(model.games) { GameCard(game: $0) }
+                        ForEach(shownGames) { GameCard(game: $0) }
                     }
                 }
             }
@@ -279,6 +291,10 @@ struct GameCard: View {
                     Spacer(minLength: 8)
                     if let size = game.sizeOnDisk, game.downloadProgress == nil {
                         Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)).zfont(10).foregroundStyle(.secondary)
+                    }
+                    if game.store != "steam" {
+                        Text(Stores.displayName(game.store)).zfont(9, .bold).padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Color.accentColor.opacity(0.2), in: Capsule())
                     }
                     Text(badge.text).zfont(9, .bold).padding(.horizontal, 8).padding(.vertical, 3)
                         .background(badge.color.opacity(0.25), in: Capsule())

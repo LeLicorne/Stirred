@@ -60,8 +60,11 @@ public struct Launcher: Sendable {
     // MARK: Engine, Steam, library
 
     /// The engine Steam currently runs under (it chose it when it started), else the preferred one.
-    public func engine() throws -> Engine {
-        if let name = ActiveEngine.read(paths, EngineLocator.steamEngineFile) {
+    public func engine() throws -> Engine { try engine(forPrefix: "steam") }
+
+    /// The engine a Windows environment currently runs under (chosen when its client or first game started), else the preferred one.
+    public func engine(forPrefix prefix: String) throws -> Engine {
+        if let name = ActiveEngine.read(paths, EngineLocator.sessionFile(forPrefix: prefix)) {
             let engine = Engine(directory: paths.engines.appendingPathComponent(name, isDirectory: true))
             if engine.wineBinary != nil { return engine }
         }
@@ -81,7 +84,14 @@ public struct Launcher: Sendable {
         return engine
     }
 
-    public func runner() throws -> WineRunner { try WineRunner(engine: try engine(), prefix: paths.prefix(named: "steam")) }
+    public func runner() throws -> WineRunner { try runner(forPrefix: "steam") }
+
+    public func runner(forPrefix prefix: String) throws -> WineRunner {
+        try WineRunner(engine: try engine(forPrefix: prefix), prefix: paths.prefix(named: prefix))
+    }
+
+    /// The runner for the Windows environment a store's games live in.
+    public func runner(forStore store: String) throws -> WineRunner { try runner(forPrefix: Stores.prefixName(forStore: store)) }
     public func steam() throws -> SteamProvider { SteamProvider(runner: try runner(), logsDirectory: paths.logs) }
     /// Steam also installs technical components that are not games (shown nowhere in Stirred).
     static let hiddenAppIDs: Set<String> = ["228980", "4099820"]   // Steamworks Common Redistributables, Ubisoft Connect Services
@@ -94,7 +104,7 @@ public struct Launcher: Sendable {
 
     /// The recipe with the user's personal settings (fixes applied by the diagnosis) on top.
     public func recipe(for game: Game) -> Recipe? {
-        overrides.apply(to: game.steamAppID.flatMap { recipes.recipe(forSteamAppID: $0) }, game: game)
+        overrides.apply(to: recipes.recipe(for: game.key), game: game)
     }
 
     public func processNeedle(for game: Game) -> String {
@@ -109,7 +119,7 @@ public struct Launcher: Sendable {
         let recipe = recipe(for: game)
         let preset = recipe?.preset.map { PresetCatalog.settings(for: $0, hardware: .current) }
         // Authority for latency: this run's option > personal setting > preset > recipe > default.
-        let personalLatency = game.steamAppID.flatMap { overrides.read($0).latency }
+        let personalLatency = overrides.read(game.key).latency
         var plan = LaunchPlanner.plan(recipe: recipe, detectedAPIs: apis, latency: options.latency ?? personalLatency ?? preset?.latency)
         if let mode = options.launchMode { plan.launchMode = mode }
         // Unreal Engine games draw nothing in 3D through DXVK + MoltenVK (no geometry shaders) and default to DirectX 12, which
