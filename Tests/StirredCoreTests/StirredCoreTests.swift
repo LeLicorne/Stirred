@@ -1737,3 +1737,28 @@ struct PresetTests {
         #expect(commands.count == 4 && commands.last?.contains("d3d9") == true)
     }
 }
+
+@Suite struct BenchTests {
+    private func samples(until seconds: Double) -> [SessionSample] {
+        stride(from: 0.0, through: seconds, by: 3).map { SessionSample(t: $0, gpuPercent: 40, cpuPercent: 120, rssMB: 900 + Int($0), processCount: 1) }
+    }
+
+    @Test func verdictFromWhatTheSamplerSaw() {
+        #expect(Bench.outcome(neverDetected: true, samples: [], requestedSeconds: 90) == .neverStarted)
+        #expect(Bench.outcome(neverDetected: false, samples: [], requestedSeconds: 90) == .neverStarted)
+        #expect(Bench.outcome(neverDetected: false, samples: samples(until: 87), requestedSeconds: 90) == .runs)
+        #expect(Bench.outcome(neverDetected: false, samples: samples(until: 12), requestedSeconds: 90) == .exitedEarly)
+    }
+
+    @Test func reportSaysRunsIsNotVerifiedAndCounts() {
+        let results = [
+            BenchResult(game: "Muck", key: "steam:1625450", outcome: .runs, backend: "dxvk", secondsAlive: 87, averageCPU: 120, peakMemoryMB: 987, findings: [], note: nil),
+            BenchResult(game: "Aniimo", key: "steam:4126040", outcome: .exitedEarly, backend: "dxvk", secondsAlive: 6, averageCPU: 50, peakMemoryMB: 400, findings: ["needs-dxmt"], note: nil),
+            BenchResult(game: "Fortnite", key: "epic:Fortnite", outcome: .blocked, backend: nil, secondsAlive: 0, averageCPU: nil, peakMemoryMB: nil, findings: [], note: "anti-cheat"),
+        ]
+        let text = Bench.report(results, date: Date(timeIntervalSince1970: 0))
+        #expect(text.contains("| Muck | runs | dxvk | 87 | 120.0 | 987 |"))
+        #expect(text.contains("needs-dxmt") && text.contains("anti-cheat"))
+        #expect(text.contains("1 of 3 stayed alive") && text.contains("not that its picture is right"))
+    }
+}

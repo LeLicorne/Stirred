@@ -50,7 +50,7 @@ func printPlan(_ plan: LaunchPlan) {
 
 func run() async throws {
     guard let command = args.first else {
-        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|owned [--refine N]|preset <game> [name]|diagnose <game> [--fix]|check <game>|uninstall <game> [--yes]|library|plan <game>|run <game> [--watch] [--keep-steam] [--latency P] [--hud] [--async]|backup [list|now|restore <name>]|epic [setup|status|login|library|install|uninstall]|report [dir]>")
+        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|owned [--refine N]|preset <game> [name]|diagnose <game> [--fix]|check <game>|uninstall <game> [--yes]|library|plan <game>|run <game> [--watch] [--keep-steam] [--latency P] [--hud] [--async]|backup [list|now|restore <name>]|epic [setup|status|login|library|install|uninstall]|bench [game ...] [--seconds N]|report [dir]>")
         print("<game> is an appid or part of the name, e.g. `stirredctl run muck --watch`")
         return
     }
@@ -202,6 +202,32 @@ func run() async throws {
         } else {
             print("tip: add --watch to sample CPU/GPU while you play, or run `stirredctl report` afterwards")
         }
+    case "bench":
+        // stirredctl bench [game ...] [--seconds N]: every installed game when none is named.
+        var names: [String] = []
+        var index = 1
+        while index < args.count {
+            if args[index] == "--seconds" { index += 2; continue }
+            if !args[index].hasPrefix("--") { names.append(args[index]) }
+            index += 1
+        }
+        let seconds = intOption("--seconds", default: 90)
+        let games = names.isEmpty ? try launcher.installedGames() : try names.map { try findGame($0) }
+        print("Benching \(games.count) game(s), \(seconds) s each. Windows will open and close by themselves.")
+        var results: [BenchResult] = []
+        for game in games {
+            print("== \(game.name)")
+            let result = await launcher.bench(game, seconds: seconds) { print("   \($0)") }
+            print("   -> \(result.outcome.rawValue)\(result.findings.isEmpty ? "" : "  findings: " + result.findings.joined(separator: ", "))\(result.note.map { "  (\($0))" } ?? "")")
+            results.append(result)
+        }
+        let report = Bench.report(results)
+        try FileManager.default.createDirectory(at: launcher.benchDirectory, withIntermediateDirectories: true)
+        let stamp = DateFormatter(); stamp.dateFormat = "yyyyMMdd-HHmmss"
+        let file = launcher.benchDirectory.appendingPathComponent("bench-\(stamp.string(from: Date())).md")
+        try report.write(to: file, atomically: true, encoding: .utf8)
+        print(report); print("saved: \(file.path)")
+        if !args.contains("--keep-steam") { await launcher.quitSteam() }
     case "update":
         guard args.count > 1 else { fail("usage: stirredctl update <game>") }
         let game = try findGame(args[1])
