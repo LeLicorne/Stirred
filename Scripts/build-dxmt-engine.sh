@@ -28,8 +28,9 @@ for fn in ['macdrv_create_metal_device', 'macdrv_release_metal_device', 'macdrv_
     s = re.sub(r'^(extern [^\n]*\b' + fn + r'\()', lambda m: '__attribute__((visibility("default"))) ' + m.group(1), s, count=1, flags=re.M)
 open(p, 'w').write(s)
 PY
+  # Order matters: the patch is made against the staged sources, the DXMT entry points are appended after it.
+  (cd src/wine-11.21 && patch -p1 < "$HERE/Patches/dxmt/winemac-stirred.patch")
   cat "$HERE/Patches/dxmt/window_dxmt.c.inc" >> "$D/window.c"
-  (cd src/wine-11.21 && patch -p1 < "$HERE/Patches/dxmt/client-view-frame.patch" && patch -p1 < "$HERE/Patches/dxmt/cursor-stay-hidden.patch")
 fi
 mkdir -p obj && cd obj
 [ -f Makefile ] || nice arch -x86_64 /bin/zsh -c '../src/wine-11.21/configure --enable-archs=i386,x86_64 --disable-tests --without-x --without-freetype --with-mingw CC="clang -arch x86_64" CXX="clang++ -arch x86_64"' > configure.log 2>&1

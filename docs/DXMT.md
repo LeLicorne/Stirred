@@ -37,8 +37,22 @@ Manual test without Stirred's app (separate data folder, optional):
 
 Wine and DXMT are LGPL: the patch and script are the corresponding source for the rebuilt `winemac.so`.
 
-## Cursor stays hidden while a game controls the mouse
+## The Wine patch, piece by piece (`Patches/dxmt/`)
 
-`Patches/dxmt/cursor-stay-hidden.patch` (applied by the build script): Wine's Mac driver brought the cursor back whenever no Wine window was
-under the pointer (while a game recentres the mouse, or when a notification or the overlay passes). Now a cursor the game hid stays hidden while
-the app is active; it returns when the game shows it or when you switch to another app. Only the `-dxmt` engine has it.
+`winemac-stirred.patch` is applied to the staged Wine 11.21 sources, then `window_dxmt.c.inc` is appended to `window.c`.
+
+| Change | Why |
+|---|---|
+| `macdrv_functions` table + compatibility layer (`window_dxmt.c.inc`) | DXMT finds Wine's Metal hooks through it and reads CrossOver's window-data layout |
+| The view created for DXMT is shown, sized to the client area and starts at the content view's origin | Wine creates views hidden (uniform grey window); the client rect is in screen coordinates, so using it as the frame shifted the picture by the window's own position |
+| The view follows the client size on every window change (`dxmt_sync_client_view`) | switching resolution or to full screen left the picture at its old size (grey bar, mouse offset) |
+| The window-surface flush no longer hides a DXMT view (`surface.c`) | Wine hides the client view whenever GDI repaints the window, and only its own Vulkan/OpenGL surfaces show theirs again: after any resize the game window stayed white |
+| A cursor hidden by the game stays hidden while the app is active (`cocoa_app.m`) | Wine brought it back whenever no Wine window was under the pointer |
+| Opt-in cursor trace: `touch /tmp/stirred-cursor-debug`, play, read `/tmp/stirred-cursor.log` | to find out why a hidden cursor still shows in some games (open issue) |
+
+`Scripts/test-dxmt-geometry.sh` checks the placement without a game: `Tests/Integration/d3d11_geometry.c` fills its window with magenta,
+a screenshot is measured (`magenta_box.swift`) and compared with the client area Windows reports, for a window, a move, a resize with and
+without `ResizeBuffers`, and a borderless full-screen window. All five match on 2026-11-16 (M4, macOS 27).
+
+Open: the cursor still visible in RV There Yet? during play (needs the trace above from a real session); Aniimo's mouse offset and grey bar
+are expected to be fixed by the two view changes but were not re-checked in the game itself.

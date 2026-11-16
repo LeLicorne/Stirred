@@ -1,0 +1,124 @@
+diff --color -ru a/dlls/winemac.drv/cocoa_app.m b/dlls/winemac.drv/cocoa_app.m
+--- a/dlls/winemac.drv/cocoa_app.m
++++ b/dlls/winemac.drv/cocoa_app.m
+@@ -927,6 +927,24 @@
+ 
+     - (void) updateCursor:(BOOL)force
+     {
++        {   /* Stirred diagnostics, off unless the file /tmp/stirred-cursor-debug exists: appends cursor state changes
++               to /tmp/stirred-cursor.log (to find out why a game's hidden cursor shows). */
++            static int lastState = -1;
++            int st = (clientWantsCursorHidden ? 1 : 0) | (cursorHidden ? 2 : 0) | (lastTargetWindow ? 4 : 0) | (self.clippingCursor ? 8 : 0) |
++                     ([NSApp isActive] ? 16 : 0);
++            if (st != lastState && access("/tmp/stirred-cursor-debug", F_OK) == 0)
++            {
++                FILE *f = fopen("/tmp/stirred-cursor.log", "a");
++                lastState = st;
++                if (f)
++                {
++                    fprintf(f, "%.3f wantsHidden=%d hidden=%d targetWindow=%d clipping=%d appActive=%d force=%d\n",
++                            [[NSProcessInfo processInfo] systemUptime], clientWantsCursorHidden, cursorHidden,
++                            lastTargetWindow != nil, self.clippingCursor, [NSApp isActive], force);
++                    fclose(f);
++                }
++            }
++        }
+         if (force || lastTargetWindow)
+         {
+             if (clientWantsCursorHidden && !cursorHidden)
+@@ -954,7 +972,11 @@
+                 [[NSCursor arrowCursor] set];
+                 cursorIsCurrent = FALSE;
+             }
+-            if (cursorHidden)
++            /* Stirred: a game that hid the cursor has taken control of the mouse. Do not bring the cursor back just because
++               no Wine window is under the pointer right now (it happens while the game recentres the mouse, or when a
++               notification or the Steam overlay passes by). It comes back when the game shows it, or when the app is
++               no longer the active one. */
++            if (cursorHidden && !(clientWantsCursorHidden && [NSApp isActive]))
+             {
+                 [NSCursor unhide];
+                 cursorHidden = FALSE;
+@@ -2474,6 +2496,16 @@
+ void macdrv_set_cursor(CFStringRef name, CFArrayRef frames)
+ {
+     SEL sel;
++    if (access("/tmp/stirred-cursor-debug", F_OK) == 0)
++    {
++        FILE *f = fopen("/tmp/stirred-cursor.log", "a");
++        if (f)
++        {
++            fprintf(f, "%.3f set_cursor %s frames=%ld\n", [[NSProcessInfo processInfo] systemUptime],
++                    name ? "named" : (frames && CFArrayGetCount(frames) ? "image" : "HIDE"), frames ? (long)CFArrayGetCount(frames) : 0L);
++            fclose(f);
++        }
++    }
+ 
+     sel = NSSelectorFromString((NSString*)name);
+     if (sel)
+diff --color -ru a/dlls/winemac.drv/macdrv.h b/dlls/winemac.drv/macdrv.h
+--- a/dlls/winemac.drv/macdrv.h
++++ b/dlls/winemac.drv/macdrv.h
+@@ -243,6 +243,7 @@
+     unsigned int        per_pixel_alpha : 1;    /* is window using per-pixel alpha? */
+     unsigned int        minimized : 1;          /* is window minimized? */
+     unsigned int        fullscreen : 1;         /* is the window visible rect fullscreen? (unrelated to native AppKit/Cocoa fullscreen) */
++    unsigned int        dxmt_view : 1;          /* client_view was created for DXMT: its frame follows the client rect */
+ };
+ 
+ struct macdrv_client_surface
+diff --color -ru a/dlls/winemac.drv/surface.c b/dlls/winemac.drv/surface.c
+--- a/dlls/winemac.drv/surface.c
++++ b/dlls/winemac.drv/surface.c
+@@ -124,7 +124,9 @@
+      * content in the window_surface */
+     if ((data = get_win_data(window_surface->hwnd)))
+     {
+-        if (data->client_view)
++        /* Stirred: a view created for DXMT has no per-frame hook to show it again (Wine's own Vulkan and OpenGL
++           surfaces do), so it must stay: hiding it here left the game window white after any repaint or resize. */
++        if (data->client_view && !data->dxmt_view)
+         {
+             macdrv_set_view_hidden(data->client_view, TRUE);
+             data->client_view = NULL;
+diff --color -ru a/dlls/winemac.drv/window.c b/dlls/winemac.drv/window.c
+--- a/dlls/winemac.drv/window.c
++++ b/dlls/winemac.drv/window.c
+@@ -1583,6 +1583,23 @@
+ }
+ 
+ 
++/* DXMT: keep the Metal view on the window's client area when the window is resized. */
++static CGRect dxmt_client_view_frame(struct macdrv_win_data *data)
++{
++    /* The Cocoa content view is the client area (macOS draws the title bar outside it), so the view starts at its
++       origin; only the size follows the client rect, which is in screen coordinates. */
++    RECT rect = data->rects.client;
++    OffsetRect(&rect, -rect.left, -rect.top);
++    return cgrect_from_rect(rect);
++}
++
++static void dxmt_sync_client_view(struct macdrv_win_data *data)
++{
++    if (data->client_view && data->dxmt_view)
++        macdrv_set_view_frame(data->client_view, dxmt_client_view_frame(data));
++}
++
++
+ /***********************************************************************
+  *              WindowPosChanging   (MACDRV.@)
+  */
+@@ -1644,6 +1661,7 @@
+ 
+     old_rects = data->rects;
+     data->rects = *new_rects;
++    dxmt_sync_client_view(data);
+ 
+     TRACE("win %p/%p new_rects %s style %08x flags %08x surface %p\n", hwnd, data->cocoa_window,
+           debugstr_window_rects(new_rects), new_style, swp_flags, surface);
+@@ -2208,3 +2226,5 @@
+     pthread_mutex_init(&win_data_mutex, &attr);
+     pthread_mutexattr_destroy(&attr);
+ }
++
++
