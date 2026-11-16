@@ -18,8 +18,13 @@
 #include <wchar.h>
 #include <stdlib.h>
 
+/* Both can be set at build time, so the same wrapper serves other Chromium helpers (Ubisoft Connect's UplayWebCore.exe). */
+#ifndef REAL_EXE
 #define REAL_EXE L"steamwebhelper_real.exe"
+#endif
+#ifndef EXTRA_FLAGS
 #define EXTRA_FLAGS L" --disable-gpu --single-process"
+#endif
 
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show)
 {

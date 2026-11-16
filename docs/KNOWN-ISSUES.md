@@ -113,3 +113,15 @@ Rosetta 2 is to be reduced after macOS 27 (check Apple's current notes). Stirred
   Harmless (exit status 0, correct output); Stirred reads standard output only.
 - Games that need Epic's overlay or Epic Online Services may refuse online play; games with Easy Anti-Cheat or BattlEye do not run.
 - Epic games cannot be moved to another disk from Stirred, and are not part of "All my games" (no Steam Deck data for them).
+
+## Ubisoft Connect trial in its own environment (2026-11-16) — not conclusive
+- Setup: fresh `prefixes/ubisoft`, official installer (`UbisoftConnectInstaller.exe`, 259 MB, Ubisoft's Akamai address, signed by Ubisoft Entertainment),
+  silent install OK (client build 12921), standard engine.
+- Result: the client starts (`upc.exe`), but its Chromium helper `UplayWebCore.exe` crashes ("Program Error") and its utility processes restart in a loop;
+  no sign-in window. Wrapping the helper like Steam's (`--disable-gpu --single-process`) does not help: here the browser process is `upc.exe` itself, the
+  helpers are only its children. Starting `upc.exe` directly with those flags makes it exit at once.
+- The trial ran on a network where every request to `ubi.com`, `ubisoft.com` (and to the Steam store, EA and Blizzard sites) was reset, so the client's
+  own log shows "Http status code is none" for all its services. The crash may or may not depend on that: **to be redone on a network that reaches Ubisoft**.
+- Not tried yet: the `uplay://` registry keys (only matter once the client runs), other Wine versions.
+- `Wrapper/steamwebhelper_wrapper.c` now takes `-DREAL_EXE=...` and `-DEXTRA_FLAGS=...` at build time, ready for another helper.
+- EA App and Battle.net trials are waiting for the same reason (their installers could not be downloaded from this network).
