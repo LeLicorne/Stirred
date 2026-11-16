@@ -16,7 +16,10 @@ SHA-256 of the pinned archives:
 Shipped in this repository and built from its own source: `Resources/wrappers/steamwebhelper_wrapper.exe`
 (from `Wrapper/steamwebhelper_wrapper.c`, GPL-3.0-or-later).
 
-Deliberately **not** used: Apple's Game Porting Toolkit / D3DMetal (redistribution restricted by Apple's license), DXMT (does not work on this Wine).
+Deliberately **not** used: Apple's Game Porting Toolkit / D3DMetal (redistribution restricted by Apple's license).
+
+Optional, built on your machine by `Scripts/build-dxmt-engine.sh` and never shipped by Stirred: DXMT v0.80 (LGPL-2.1, https://github.com/3Shain/dxmt) and a
+`winemac.so` rebuilt from Wine 11.21 + Wine Staging 11.21 (LGPL-2.1) with the changes in `Patches/dxmt/`, which are the corresponding source.
 
 Stirred itself is GPL-3.0-or-later (see `LICENSE`).
 

@@ -105,3 +105,11 @@ Rosetta 2 is to be reduced after macOS 27 (check Apple's current notes). Stirred
   It runs after each game (5 kept, skipped if nothing changed) and before engine switch/rollback, uninstall and move (10 kept each).
 - `stirredctl backup [list|now|restore <name>]`, and Disk > "Game settings and saves" in the app. Restore needs Steam closed and takes a safety copy first.
 - Not covered: the games' own files, files outside those folders (a game that writes next to its executable), and a lost disk (copies are on the same disk).
+
+## Epic Games (2026-11-16)
+- Not verified end to end yet: signing in, listing, installing and starting a real game need the account owner. What is verified: the tool downloads and
+  matches its checksum, runs, reports "not signed in"; every parser and the launch command are unit-tested against Legendary's documented output.
+- Legendary prints `Failed to execute script 'pyi_rth_multiprocessing'` on short commands: a helper process starts while the main one already ended.
+  Harmless (exit status 0, correct output); Stirred reads standard output only.
+- Games that need Epic's overlay or Epic Online Services may refuse online play; games with Easy Anti-Cheat or BattlEye do not run.
+- Epic games cannot be moved to another disk from Stirred, and are not part of "All my games" (no Steam Deck data for them).
