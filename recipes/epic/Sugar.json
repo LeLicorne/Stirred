@@ -1,0 +1,10 @@
+{
+ "appid": 0,
+ "store": "epic",
+ "game_id": "Sugar",
+ "name": "Rocket League",
+ "status": "unsupported",
+ "verified": false,
+ "blockers": ["anti-cheat (Easy Anti-Cheat)"],
+ "notes": "Easy Anti-Cheat refuses to start under Wine on macOS. Stirred never tries to bypass it."
+}

@@ -144,7 +144,7 @@ struct CouchView: View {
     }
 
     private func card(_ game: Game, selected: Bool) -> some View {
-        GameCover(appID: Int(game.storeID) ?? 0, name: game.name)
+        GameCover(appID: game.steamAppID ?? 0, name: game.name, remote: game.store == "epic" ? model.epicCover(game.storeID) : nil)
         .frame(width: 420, height: 196)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.accentColor, lineWidth: selected ? 5 : 0))

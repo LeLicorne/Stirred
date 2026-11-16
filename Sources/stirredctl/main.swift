@@ -27,6 +27,9 @@ func intOption(_ name: String, default value: Int) -> Int {
 }
 
 /// Accepts an appid ("1625450") or part of a name ("muck").
+/// Last percentage printed by a progress callback (callbacks run on other threads).
+final class Last: @unchecked Sendable { var value = -1 }
+
 func findGame(_ query: String) throws -> Game {
     let games = try launcher.installedGames()
     if let exact = games.first(where: { $0.storeID == query }) { return exact }
@@ -47,7 +50,7 @@ func printPlan(_ plan: LaunchPlan) {
 
 func run() async throws {
     guard let command = args.first else {
-        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|owned [--refine N]|preset <game> [name]|diagnose <game> [--fix]|check <game>|uninstall <game> [--yes]|library|plan <game>|run <game> [--watch] [--keep-steam] [--latency P] [--hud] [--async]|backup [list|now|restore <name>]|report [dir]>")
+        print("usage: stirredctl <setup|doctor|init-prefix|steam [--silent]|quit|owned [--refine N]|preset <game> [name]|diagnose <game> [--fix]|check <game>|uninstall <game> [--yes]|library|plan <game>|run <game> [--watch] [--keep-steam] [--latency P] [--hud] [--async]|backup [list|now|restore <name>]|epic [setup|status|login|library|install|uninstall]|report [dir]>")
         print("<game> is an appid or part of the name, e.g. `stirredctl run muck --watch`")
         return
     }
@@ -272,13 +275,53 @@ func run() async throws {
         let game = try findGame(args[1])
         let plan = args[2] == "--back" ? try launcher.movePlanBack(for: game) : try launcher.movePlan(for: game, to: URL(fileURLWithPath: args[2]))
         print("\(plan.direction == .toExternal ? "Moving" : "Moving back") \(game.name) (\(ByteCountFormatter.string(fromByteCount: plan.bytes, countStyle: .file))): \(plan.from.path) -> \(plan.direction == .toExternal ? plan.to.path : plan.libraryFolder.path)")
-        final class Last: @unchecked Sendable { var value = -1 }
         let last = Last()
         try await launcher.move(plan, onPhase: { print($0) }, progress: { p in
             let percent = Int(p * 100) / 10 * 10
             if percent != last.value { last.value = percent; print("\(percent)%") }
         })
         print("done")
+    case "epic":
+        let epic = launcher.epic()
+        let sub = args.count > 1 ? args[1] : "status"
+        switch sub {
+        case "setup":
+            let path = try await StoreTool.legendary.install(launcher.paths) { print($0) }
+            print("Legendary \(StoreTool.legendary.version) ready: \(path.path)")
+        case "status":
+            print("tool: \(epic.isInstalled ? "installed" : "not set up (stirredctl epic setup)")")
+            print("account: \(epic.account() ?? "not signed in")")
+            print("installed: \(epic.installedRecords().map(\.title).joined(separator: ", "))")
+        case "login":
+            guard args.count > 2 else {
+                print("1. Open https://legendary.gl/epiclogin in your browser and sign in to Epic there.")
+                print("2. Copy the authorizationCode value the page shows.")
+                print("3. Run: stirredctl epic login <code>")
+                exit(2)
+            }
+            guard let code = EpicParsing.authorizationCode(from: args[2]) else { fail("That does not look like an authorization code.") }
+            try epic.signIn(code: code)
+            print("signed in as \(epic.account() ?? "?")")
+        case "logout":
+            try epic.signOut(); print("signed out")
+        case "library":
+            for game in try epic.library(refresh: args.contains("--refresh")) {
+                print("\(game.appName)\t\(game.title)\(game.thirdPartyStore.map { "\t(needs \($0))" } ?? "")")
+            }
+        case "install":
+            guard args.count > 2 else { fail("usage: stirredctl epic install <app name from `epic library`>") }
+            let last = Last()
+            try await epic.install(appName: args[2]) { value in
+                let percent = Int(value * 100)
+                if percent != last.value { last.value = percent; print("\(percent)%") }
+            }
+            print("installed")
+        case "uninstall":
+            guard args.count > 2 else { fail("usage: stirredctl epic uninstall <app name>") }
+            try epic.uninstall(appName: args[2]); print("uninstalled")
+        default:
+            print("usage: stirredctl epic [setup|status|login <code>|logout|library [--refresh]|install <app>|uninstall <app>]"); exit(2)
+        }
     case "engine":
         let sub = args.count > 1 ? args[1] : "status"
         let updater = launcher.engineUpdater

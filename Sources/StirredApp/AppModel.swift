@@ -77,6 +77,7 @@ final class AppModel {
     func start() {
         guard !started else { return }
         started = true
+        refreshEpic()   // pictures and titles of installed Epic games come from the library list kept on disk
         Task { while true { await refresh(); try? await Task.sleep(nanoseconds: 3_000_000_000) } }
     }
 
@@ -496,6 +497,88 @@ final class AppModel {
     }
 
     /// Asks the game to quit; if it is still running a few seconds later (error dialog, hung window) it is force-quit.
+    // MARK: Epic Games
+
+    var epicToolInstalled = false
+    var epicAccount: String?
+    var epicLibrary: [EpicGame] = []
+    var epicBusy: String?
+    var epicError: String?
+    /// App name -> 0...1 while an Epic game downloads.
+    var epicInstalls: [String: Double] = [:]
+
+    func refreshEpic(reloadLibrary: Bool = false) {
+        let launcher = self.launcher
+        Task.detached { [weak self] in
+            let epic = launcher.epic()
+            let installed = epic.isInstalled
+            let account = installed ? epic.account() : nil
+            var library: [EpicGame] = []
+            var problem: String?
+            if account != nil {
+                do { library = try epic.library(refresh: reloadLibrary) } catch { problem = "\(error)" }
+            }
+            await MainActor.run {
+                self?.epicToolInstalled = installed; self?.epicAccount = account; self?.epicLibrary = library
+                if let problem { self?.epicError = problem }
+                self?.epicBusy = nil
+            }
+        }
+    }
+
+    /// Downloads Legendary (15 MB, checksum verified) the first time.
+    func setUpEpic() {
+        guard epicBusy == nil else { return }
+        epicBusy = "Downloading the Epic tool…"; epicError = nil
+        let launcher = self.launcher
+        Task.detached { [weak self] in
+            do { try await StoreTool.legendary.install(launcher.paths) }
+            catch { await MainActor.run { self?.epicError = "\(error)" } }
+            await MainActor.run { self?.epicBusy = nil; self?.refreshEpic() }
+        }
+    }
+
+    /// Opens Epic's own sign-in page; the user signs in there and pastes back the code the page shows.
+    func openEpicSignInPage() {
+        if let url = URL(string: "https://legendary.gl/epiclogin") { NSWorkspace.shared.open(url) }
+    }
+
+    func signInToEpic(pasted: String) {
+        guard let code = EpicParsing.authorizationCode(from: pasted) else { epicError = "That does not look like the code from Epic's page."; return }
+        epicBusy = "Signing in…"; epicError = nil
+        let launcher = self.launcher
+        Task.detached { [weak self] in
+            do { try launcher.epic().signIn(code: code) } catch { await MainActor.run { self?.epicError = "\(error)" } }
+            await MainActor.run { self?.refreshEpic(reloadLibrary: true) }
+        }
+    }
+
+    func signOutOfEpic() {
+        let launcher = self.launcher
+        Task.detached { [weak self] in
+            try? launcher.epic().signOut()
+            await MainActor.run { self?.refreshEpic() }
+        }
+    }
+
+    func installEpicGame(_ game: EpicGame) {
+        guard epicInstalls[game.appName] == nil else { return }
+        epicInstalls[game.appName] = 0; epicError = nil
+        let launcher = self.launcher, name = game.appName
+        Task.detached { [weak self] in
+            do {
+                try await launcher.epic().install(appName: name) { value in
+                    Task { @MainActor in if self?.epicInstalls[name] != nil { self?.epicInstalls[name] = value } }
+                }
+            } catch { await MainActor.run { self?.epicError = "\(game.title): \(error)" } }
+            await MainActor.run { self?.epicInstalls[name] = nil }
+            await self?.refresh()
+        }
+    }
+
+    /// Picture of an installed Epic game (from the library list kept on disk).
+    func epicCover(_ appName: String) -> URL? { epicLibrary.first { $0.appName == appName }?.cover }
+
     func stop(_ game: Game) {
         let launcher = self.launcher
         Task.detached { await launcher.stopGameEscalating(game) }

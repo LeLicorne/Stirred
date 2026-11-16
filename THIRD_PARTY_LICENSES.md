@@ -19,3 +19,9 @@ Shipped in this repository and built from its own source: `Resources/wrappers/st
 Deliberately **not** used: Apple's Game Porting Toolkit / D3DMetal (redistribution restricted by Apple's license), DXMT (does not work on this Wine).
 
 Stirred itself is GPL-3.0-or-later (see `LICENSE`).
+
+## Legendary (optional, Epic Games support)
+- What: open-source command-line client for the Epic Games Store. Version 0.21.1, native Apple-chip binary.
+- License: GPL-3.0. Source and releases: https://github.com/legendary-gl/legendary (the `derrod/legendary` repository now redirects there).
+- How Stirred uses it: downloaded from the release page above only when the user sets Epic up, verified by SHA-256
+  (`d87978321dba9cb731fab40c72f0a30bed55baca8b5341ab21024c5733cd837e`), run as a separate program. Not bundled with Stirred, not modified.

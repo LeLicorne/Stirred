@@ -1578,3 +1578,102 @@ struct PresetTests {
         #expect(try String(contentsOf: paths.prefix(named: "steam").appendingPathComponent("system.reg"), encoding: .utf8) == "reg steam")
     }
 }
+
+@Suite struct EpicTests {
+    @Test func readsTheLibraryListWithPicturesAndThirdPartyGames() {
+        let json = #"""
+        [{"app_name": "Salt", "app_title": "Zeta Game", "metadata": {"developer": "Studio", "keyImages": [
+            {"type": "DieselGameBoxTall", "url": "https://cdn.example/tall.jpg"}, {"type": "DieselGameBox", "url": "https://cdn.example/wide.jpg"}],
+            "customAttributes": {"CanRunOffline": {"type": "STRING", "value": "true"}}}},
+         {"app_name": "Pepper", "app_title": "Alpha Game", "metadata": {"keyImages": [],
+            "customAttributes": {"ThirdPartyManagedApp": {"type": "STRING", "value": "Origin"}}}},
+         {"no_app_name": true}]
+        """#
+        let games = EpicParsing.library(Data(json.utf8))
+        #expect(games.map(\.title) == ["Alpha Game", "Zeta Game"])
+        #expect(games[1].cover?.absoluteString == "https://cdn.example/wide.jpg" && games[1].developer == "Studio")
+        #expect(games[0].thirdPartyStore == "Origin" && games[0].cover == nil)
+        #expect(games[1].thirdPartyStore == nil)
+        #expect(EpicParsing.library(Data("not json".utf8)).isEmpty)
+    }
+
+    @Test func readsInstalledGamesWithoutDLC() {
+        let json = #"""
+        {"Salt": {"app_name": "Salt", "title": "Zeta Game", "install_path": "/games/Zeta", "executable": "Zeta/Binaries/Win64/Zeta.exe",
+                  "install_size": 123456, "platform": "Windows", "is_dlc": false},
+         "SaltDLC": {"app_name": "SaltDLC", "title": "Zeta DLC", "install_path": "/games/Zeta", "is_dlc": true}}
+        """#
+        let installed = EpicParsing.installed(Data(json.utf8))
+        #expect(installed.count == 1)
+        #expect(installed[0].appName == "Salt" && installed[0].installSize == 123456 && installed[0].executable.hasSuffix("Zeta.exe"))
+    }
+
+    @Test func signedOutAndSignedInStatus() {
+        #expect(EpicParsing.account(statusJSON: Data(#"{"account": "<not logged in>", "games_available": 0}"#.utf8)) == nil)
+        #expect(EpicParsing.account(statusJSON: Data(#"{"account": "LeLicorne", "games_available": 12}"#.utf8)) == "LeLicorne")
+        #expect(EpicParsing.account(statusJSON: Data()) == nil)
+    }
+
+    @Test func authorizationCodeFromWhatThePageShows() {
+        #expect(EpicParsing.authorizationCode(from: #"{"redirectUrl":"https://x","authorizationCode":"abc123DEF","sid":null}"#) == "abc123DEF")
+        #expect(EpicParsing.authorizationCode(from: "  \"abc123DEF\" \n") == "abc123DEF")
+        #expect(EpicParsing.authorizationCode(from: "abc 123; rm -rf") == nil)
+        #expect(EpicParsing.authorizationCode(from: #"{"authorizationCode":""}"#) == nil)
+        #expect(EpicParsing.authorizationCode(from: "") == nil)
+    }
+
+    @Test func downloadProgressLines() {
+        #expect(EpicParsing.progress(line: "[DLManager] INFO: = Progress: 12.50% (5/40), Running for 00:00:10, ETA: 00:01:00") == 0.125)
+        #expect(EpicParsing.progress(line: "[DLManager] INFO: = Progress: 100.00% (40/40)") == 1)
+        #expect(EpicParsing.progress(line: "[cli] INFO: Preparing download...") == nil)
+    }
+
+    @Test func launchCommandKeepsEpicsSignInParametersAndAddsThePlan() throws {
+        let json = #"""
+        {"game_parameters": ["-epicapp=Salt"], "game_executable": "Zeta\\Binaries\\Win64\\Zeta.exe", "game_directory": "/games/Zeta",
+         "egl_parameters": ["-AUTH_LOGIN=unused", "-AUTH_PASSWORD=token", "-AUTH_TYPE=exchangecode", "-epicusername=Me"],
+         "launch_command": [], "working_directory": null, "user_parameters": ["-windowed"], "environment": {"SOME": "value", "WINEMSYNC": "0"},
+         "pre_launch_command": "", "pre_launch_wait": false}
+        """#
+        let info = try #require(EpicParsing.launchInfo(Data(json.utf8)))
+        let plan = LaunchPlanner.plan(recipe: Recipe(appid: 0, name: "Zeta", status: .playable, launchArgs: ["-dx11", "-windowed"]), detectedAPIs: [.d3d11])
+        let command = EpicLaunchCommand.make(info: info, plan: plan)
+        #expect(command.executable.path == "/games/Zeta/Zeta/Binaries/Win64/Zeta.exe")
+        #expect(command.workingDirectory.path == "/games/Zeta/Zeta/Binaries/Win64")
+        #expect(command.arguments == ["-epicapp=Salt", "-AUTH_LOGIN=unused", "-AUTH_PASSWORD=token", "-AUTH_TYPE=exchangecode", "-epicusername=Me", "-windowed", "-dx11"])
+        #expect(command.environment["SOME"] == "value")
+        #expect(command.environment["WINEMSYNC"] == "1")            // Stirred's plan wins over the tool's environment
+        #expect(EpicParsing.launchInfo(Data(#"{"game_directory": "/x", "game_executable": ""}"#.utf8)) == nil)
+    }
+
+    @Test func epicGamesAreFoundInstalledAndBlockedByTheAntiCheatRecipes() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-epic-\(UUID().uuidString)")
+        let paths = StirredPaths(root: root)
+        let install = paths.prefix(named: "games").appendingPathComponent("drive_c/Games/Epic/Zeta")
+        try FileManager.default.createDirectory(at: install.appendingPathComponent("Bin"), withIntermediateDirectories: true)
+        try Data([0x4D, 0x5A]).write(to: install.appendingPathComponent("Bin/Zeta.exe"))
+        let config = root.appendingPathComponent("tools/legendary-config")
+        try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
+        try #"{"Fortnite": {"app_name": "Fortnite", "title": "Fortnite", "install_path": "\#(install.path)", "executable": "Bin/Zeta.exe", "install_size": 10, "platform": "Windows"}}"#
+            .write(to: config.appendingPathComponent("installed.json"), atomically: true, encoding: .utf8)
+        let recipes = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("recipes")
+        let launcher = Launcher(paths: paths, recipesDirectory: recipes, resourcesDirectory: root)
+        let provider = launcher.epic()
+        #expect(!provider.isSignedIn && !provider.isInstalled)
+        let games = try provider.installedGames()
+        #expect(games.count == 1 && games[0].store == "epic" && games[0].key == GameKey(store: "epic", id: "Fortnite"))
+        #expect(launcher.processNeedle(for: games[0]) == "Zeta.exe")
+        let plan = launcher.plan(for: games[0])
+        #expect(plan.blockedReason?.contains("anti-cheat") == true)
+        #expect(Launcher.stopPatterns(for: games[0], needle: "Zeta.exe").contains(NSRegularExpression.escapedPattern(for: "\\Epic\\Zeta\\")))
+        #expect(provider.gamesDirectory.path.hasSuffix("prefixes/games/drive_c/Games/Epic"))
+    }
+
+    @Test func theEpicToolIsPinned() {
+        let tool = StoreTool.legendary
+        #expect(tool.url.host == "github.com" && tool.url.path.contains("/legendary-gl/legendary/releases/download/\(tool.version)/"))
+        #expect(tool.sha256.count == 64)
+        let paths = StirredPaths(root: URL(fileURLWithPath: "/tmp/x"))
+        #expect(tool.binary(paths).path == "/tmp/x/tools/legendary-0.21.1/legendary")
+    }
+}

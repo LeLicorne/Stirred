@@ -1,0 +1,10 @@
+{
+ "appid": 0,
+ "store": "epic",
+ "game_id": "Fortnite",
+ "name": "Fortnite",
+ "status": "unsupported",
+ "verified": false,
+ "blockers": ["anti-cheat (Easy Anti-Cheat and BattlEye, kernel level)"],
+ "notes": "Kernel anti-cheat does not run on macOS under Wine. Stirred never tries to bypass it."
+}

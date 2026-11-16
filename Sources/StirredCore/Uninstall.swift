@@ -80,7 +80,12 @@ public enum Uninstaller {
 extension Launcher {
     /// For the confirmation dialog.
     public func uninstallPlan(for game: Game) throws -> UninstallPlan {
-        try Uninstaller.plan(for: game, steamRoot: try steam().steamRoot)
+        if game.store == "epic" {
+            // Epic's own tool removes the files; the plan only says what and how much, for the confirmation dialog.
+            guard let dir = game.installDirectory, FileManager.default.fileExists(atPath: dir.path) else { throw UninstallError.notInstalled }
+            return UninstallPlan(game: game, paths: [dir], bytes: game.sizeOnDisk ?? 0)
+        }
+        return try Uninstaller.plan(for: game, steamRoot: try steam().steamRoot)
     }
 
     /// Closes Steam (it would otherwise keep believing the game is installed), deletes the files, returns the bytes freed.
@@ -90,6 +95,12 @@ extension Launcher {
         let plan = try uninstallPlan(for: game)
         if SystemSampler.sample(processNeedle: processNeedle(for: game), at: 0).processCount > 0 {
             throw UninstallError.gameRunning
+        }
+        if game.store == "epic" {
+            backupGameData(.uninstall)
+            onPhase("Uninstalling…")
+            try epic().uninstall(appName: game.storeID)
+            return plan.bytes
         }
         if steamState() != .stopped {
             onPhase("Closing Steam…")

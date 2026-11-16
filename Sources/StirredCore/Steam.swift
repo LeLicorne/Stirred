@@ -10,6 +10,8 @@ public struct Game: Sendable, Equatable, Identifiable {
     public var sizeOnDisk: Int64? = nil
     /// 0...1 while Steam is downloading or updating it, nil once fully installed.
     public var downloadProgress: Double? = nil
+    /// The game's executable inside its folder when the store says which one it is (Epic does; for Steam it is found by looking).
+    public var executable: String? = nil
     public var id: String { "\(store):\(storeID)" }
 
     public var steamAppID: Int? { store == "steam" ? Int(storeID) : nil }

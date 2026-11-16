@@ -96,8 +96,24 @@ public struct Launcher: Sendable {
     /// Steam also installs technical components that are not games (shown nowhere in Stirred).
     static let hiddenAppIDs: Set<String> = ["228980", "4099820"]   // Steamworks Common Redistributables, Ubisoft Connect Services
 
+    /// Installed games of every store, Steam first.
     public func installedGames() throws -> [Game] {
-        try steam().installedGames().filter { !Self.hiddenAppIDs.contains($0.storeID) }
+        let steamGames = try steam().installedGames().filter { !Self.hiddenAppIDs.contains($0.storeID) }
+        return steamGames + ((try? epic().installedGames()) ?? [])
+    }
+
+    /// Epic Games through Legendary. Works without an engine for everything except launching.
+    public func epic() -> EpicProvider { EpicProvider(paths: paths, runner: try? runner(forStore: "epic")) }
+
+    /// Every executable worth preparing for a game: the one its store names, then the ones found by looking.
+    func executables(of game: Game) -> [URL] {
+        guard let dir = game.installDirectory else { return [] }
+        var found = GameExecutableFinder.candidates(in: dir)
+        if let named = game.executable {
+            let url = dir.appendingPathComponent(named.replacingOccurrences(of: "\\", with: "/"))
+            if FileManager.default.fileExists(atPath: url.path) { found.removeAll { $0.path == url.path }; found.insert(url, at: 0) }
+        }
+        return found
     }
 
     public var overrides: OverrideStore { OverrideStore(paths: paths) }
@@ -108,14 +124,14 @@ public struct Launcher: Sendable {
     }
 
     public func processNeedle(for game: Game) -> String {
-        GameExecutableFinder.candidates(in: game.installDirectory ?? paths.root).first?.lastPathComponent ?? game.name
+        executables(of: game).first?.lastPathComponent ?? game.name
     }
 
     /// The preset in effect for a game: the user's choice, else the recipe's suggestion, else none (the recipe's own settings apply).
     public func preset(for game: Game) -> QualityPreset? { recipe(for: game)?.preset }
 
     public func plan(for game: Game, options: LaunchOptions = LaunchOptions()) -> LaunchPlan {
-        let apis = GraphicsDetector.detect(executables: GameExecutableFinder.candidates(in: game.installDirectory ?? paths.root))
+        let apis = GraphicsDetector.detect(executables: executables(of: game))
         let recipe = recipe(for: game)
         let preset = recipe?.preset.map { PresetCatalog.settings(for: $0, hardware: .current) }
         // Authority for latency: this run's option > personal setting > preset > recipe > default.
@@ -175,9 +191,9 @@ public struct Launcher: Sendable {
         guard FileManager.default.fileExists(atPath: dxvkPackage.path) else {
             throw StirredError.blocked("DXVK component missing at \(dxvkPackage.path). Run Scripts/install-components.sh")
         }
-        let runner = try runner()
+        let runner = try runner(forStore: game.store)
         var lines: [String] = []
-        for exe in GameExecutableFinder.candidates(in: dir) {
+        for exe in executables(of: game) {
             let arch = PEInfo.architecture(ofFile: exe)
             guard arch == .x86 || arch == .x64 else { continue }
             try DXVKInstaller.install(package: dxvkPackage, executable: exe, architecture: arch, latency: plan.latency,
@@ -198,7 +214,7 @@ public struct Launcher: Sendable {
     func prepareDXMT(for game: Game) async throws -> [String] {
         let engine = try engine(for: .dxmt)
         guard let lib = engine.libraryDirectory else { throw StirredError.engineNotFound }
-        let prefix = paths.prefix(named: "steam")
+        let prefix = paths.prefix(named: Stores.prefixName(forStore: game.store))
         var lines: [String] = []
         for (source, target) in [("x86_64-windows", "system32"), ("i386-windows", "syswow64")] {
             let from = lib.appendingPathComponent("\(source)/winemetal.dll")
@@ -208,9 +224,9 @@ public struct Launcher: Sendable {
             if FileManager.default.fileExists(atPath: to.path) { try FileManager.default.removeItem(at: to) }
             try FileManager.default.copyItem(at: from, to: to)
         }
-        guard let dir = game.installDirectory else { return lines }
-        let runner = try runner()
-        for exe in GameExecutableFinder.candidates(in: dir) {
+        guard game.installDirectory != nil else { return lines }
+        let runner = try runner(forStore: game.store)
+        for exe in executables(of: game) {
             let folder = exe.deletingLastPathComponent()
             var removed = false
             for name in DXVKInstaller.dlls + ["dxvk.conf"] {
@@ -428,7 +444,7 @@ public struct Launcher: Sendable {
     public static func stopPatterns(for game: Game, needle: String) -> [String] {
         var patterns = [NSRegularExpression.escapedPattern(for: needle)]
         if let dir = game.installDirectory {
-            patterns.append(NSRegularExpression.escapedPattern(for: "\\common\\\(dir.lastPathComponent)\\"))
+            patterns.append(NSRegularExpression.escapedPattern(for: "\\\(game.store == "steam" ? "common" : dir.deletingLastPathComponent().lastPathComponent)\\\(dir.lastPathComponent)\\"))
             let usesUbisoft = (try? FileManager.default.contentsOfDirectory(atPath: dir.path))?
                 .contains { $0.lowercased().hasPrefix("upc_r") && $0.lowercased().hasSuffix(".dll") } ?? false
             if usesUbisoft { patterns.append("Ubisoft Game Launcher") }
@@ -444,6 +460,7 @@ public struct Launcher: Sendable {
     ) async throws -> SessionRecorder {
         let plan = plan(for: game, options: options)
         if let reason = plan.blockedReason { throw StirredError.blocked(reason) }
+        if game.store != "steam" { return try await playWithoutClient(game, plan: plan, options: options, onPhase: onPhase) }
 
         var since = Date.distantPast
         var timeout: TimeInterval = 240
@@ -475,9 +492,51 @@ public struct Launcher: Sendable {
         return recorder
     }
 
+    /// Stores without a client to keep running (Epic, GOG): Stirred starts the game itself in that store's Windows environment.
+    func playWithoutClient(
+        _ game: Game, plan: LaunchPlan, options: LaunchOptions, onPhase: @Sendable (String) -> Void
+    ) async throws -> SessionRecorder {
+        let prefixName = Stores.prefixName(forStore: game.store)
+        let wanted = try engine(for: plan.backend)
+        let marker = EngineLocator.sessionFile(forPrefix: prefixName)
+        // Each environment has one Wine at a time: stop what still runs there under the other engine before switching.
+        if let running = ActiveEngine.read(paths, marker), running != wanted.name, let old = try? runner(forPrefix: prefixName) {
+            onPhase("Switching to the \(plan.backend == .dxmt ? "DXMT" : "standard") engine…")
+            stopWineServer(old)
+        }
+        try ActiveEngine.write(paths, marker, value: wanted.name)
+        let runner = try runner(forPrefix: prefixName)
+        if !runner.isPrefixInitialised {
+            onPhase("Creating the Windows environment…")
+            try await runner.initialisePrefix(logFile: paths.logs.appendingPathComponent("wineboot-\(prefixName).log"))
+        }
+        onPhase("Preparing graphics…")
+        try await prepareGraphics(for: game, plan: plan, options: options)
+        var recorder = try SessionRecorder.begin(
+            game: game, plan: plan, engine: wanted.name, processNeedle: processNeedle(for: game), paths: paths)
+        recorder.record.startedSteam = false
+        try recorder.save()
+        onPhase("Launching…")
+        switch game.store {
+        case "epic": _ = try epic().launch(game, plan: plan)
+        default: throw StirredError.blocked("\(Stores.displayName(game.store)) games cannot be started yet.")
+        }
+        return recorder
+    }
+
+    /// `wineserver -k` for one environment: ends every Windows program running in it.
+    func stopWineServer(_ runner: WineRunner) {
+        guard let process = try? runner.makeProcess(arguments: [], extraEnvironment: [:]) else { return }
+        process.executableURL = runner.wine.deletingLastPathComponent().appendingPathComponent("wineserver")
+        process.arguments = ["-k"]
+        guard (try? process.run()) != nil else { return }
+        process.waitUntilExit()
+    }
+
     @discardableResult
     public func finish(_ recorder: inout SessionRecorder) throws -> URL {
-        try recorder.finish(paths: paths, prefix: try runner().prefix)
+        let prefixName = Stores.prefixName(forStore: recorder.record.store)
+        return try recorder.finish(paths: paths, prefix: try runner(forPrefix: prefixName).prefix)
     }
 
     // MARK: Sessions

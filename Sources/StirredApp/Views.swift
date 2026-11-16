@@ -3,10 +3,10 @@ import Charts
 import StirredCore
 
 enum Section: String, CaseIterable, Identifiable {
-    case library = "Library", all = "All my games", check = "Check a game", disk = "Disk", engine = "Engine", activity = "Activity", logs = "Logs"
+    case library = "Library", all = "All my games", check = "Check a game", stores = "Stores", disk = "Disk", engine = "Engine", activity = "Activity", logs = "Logs"
     var id: String { rawValue }
     var icon: String {
-        switch self { case .library: "gamecontroller"; case .all: "square.grid.2x2"; case .check: "magnifyingglass"; case .disk: "internaldrive"; case .engine: "gearshape.2"; case .activity: "waveform.path.ecg"; case .logs: "doc.text.magnifyingglass" }
+        switch self { case .library: "gamecontroller"; case .all: "square.grid.2x2"; case .check: "magnifyingglass"; case .stores: "bag"; case .disk: "internaldrive"; case .engine: "gearshape.2"; case .activity: "waveform.path.ecg"; case .logs: "doc.text.magnifyingglass" }
     }
 }
 
@@ -38,6 +38,7 @@ struct ContentView: View {
             case .library: LibraryView()
             case .all: AllGamesView()
             case .check: CheckView()
+            case .stores: StoresView()
             case .disk: DiskView()
             case .engine: EngineView()
             case .activity: ActivityView()
@@ -278,7 +279,8 @@ struct GameCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            GameCover(appID: Int(game.storeID) ?? 0, name: game.name, dimmed: unsupported)
+            GameCover(appID: game.steamAppID ?? 0, name: game.name, dimmed: unsupported,
+                      remote: game.store == "epic" ? model.epicCover(game.storeID) : nil)
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline) {
@@ -302,10 +304,12 @@ struct GameCard: View {
                         if model.hasUpdater(game) { Button("Update game") { model.play(game, update: true) } }
                         Button("Diagnose…") { model.diagnose(game) }
                         Button("Copy recipe to share") { model.copyRecipe(game) }
-                        if case .thisMac = model.location(of: game) {
-                            Button("Move to another disk…") { model.moveToAnotherDisk(game) }
-                        } else {
-                            Button("Move back to this Mac") { model.moveBack(game) }
+                        if game.store == "steam" {
+                            if case .thisMac = model.location(of: game) {
+                                Button("Move to another disk…") { model.moveToAnotherDisk(game) }
+                            } else {
+                                Button("Move back to this Mac") { model.moveBack(game) }
+                            }
                         }
                         Divider()
                         Button("Uninstall…", role: .destructive) { model.askUninstall(game) }
@@ -539,6 +543,105 @@ extension View {
     func zoomed() -> some View { modifier(Zoomed()) }
     /// Same as `.font` with a system text style's size, multiplied by the zoom.
     func zfont(_ size: CGFloat, _ weight: Font.Weight = .regular, mono: Bool = false) -> some View { modifier(ZoomedFont(size: size, weight: weight, mono: mono)) }
+}
+
+// MARK: - Stores
+
+struct StoresView: View {
+    @Environment(AppModel.self) private var model
+    @State private var pastedCode = ""
+    @State private var search = ""
+
+    private var shown: [EpicGame] {
+        search.isEmpty ? model.epicLibrary : model.epicLibrary.filter { $0.title.localizedCaseInsensitiveContains(search) }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                GroupBox("Steam") {
+                    HStack {
+                        Label(model.steam == .stopped ? "Not running" : (model.steam == .ready ? "Signed in and ready" : "Starting or waiting for sign-in"),
+                              systemImage: model.steam == .ready ? "checkmark.circle.fill" : "circle")
+                        Spacer()
+                        Text("\(model.games.filter { $0.store == "steam" }.count) installed").foregroundStyle(.secondary)
+                    }.padding(6)
+                }
+                GroupBox("Epic Games") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if let busy = model.epicBusy { HStack { ProgressView().controlSize(.small); Text(busy) } }
+                        if let error = model.epicError { Text(error).foregroundStyle(.red).zfont(12) }
+                        if !model.epicToolInstalled {
+                            Text("Epic games run through Legendary, a free open-source tool (GPL-3). Stirred downloads it from its official page (15 MB) and checks it before use.")
+                                .zfont(12).foregroundStyle(.secondary)
+                            Button("Set up Epic Games") { model.setUpEpic() }.disabled(model.epicBusy != nil)
+                        } else if let account = model.epicAccount {
+                            HStack {
+                                Label("Signed in as \(account)", systemImage: "checkmark.circle.fill")
+                                Spacer()
+                                Button("Refresh my games") { model.epicBusy = "Loading your games…"; model.refreshEpic(reloadLibrary: true) }.disabled(model.epicBusy != nil)
+                                Button("Sign out") { model.signOutOfEpic() }
+                            }
+                            TextField("Search your Epic games", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 320)
+                            if model.epicLibrary.isEmpty { Text("No Windows game found on this account yet.").foregroundStyle(.secondary) }
+                            LazyVStack(spacing: 0) {
+                                ForEach(shown) { game in
+                                    EpicRow(game: game)
+                                    Divider()
+                                }
+                            }
+                        } else {
+                            Text("1. Open Epic's sign-in page and sign in there (Stirred never sees your password).\n2. The page then shows a short text containing an authorizationCode: copy it.\n3. Paste it here.")
+                                .zfont(12).foregroundStyle(.secondary)
+                            HStack {
+                                Button("Open Epic's sign-in page") { model.openEpicSignInPage() }
+                                TextField("Paste the code here", text: $pastedCode).textFieldStyle(.roundedBorder).frame(maxWidth: 320)
+                                Button("Sign in") { model.signInToEpic(pasted: pastedCode); pastedCode = "" }
+                                    .disabled(pastedCode.trimmingCharacters(in: .whitespaces).isEmpty || model.epicBusy != nil)
+                            }
+                        }
+                    }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
+                }
+                GroupBox("Other stores") {
+                    Text("GOG, Ubisoft Connect, EA App and Battle.net are not available yet. See the roadmap.")
+                        .zfont(12).foregroundStyle(.secondary).padding(6).frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(24)
+        }
+        .navigationTitle("Stores")
+        .task { model.refreshEpic() }
+    }
+}
+
+struct EpicRow: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.uiZoom) private var zoom
+    let game: EpicGame
+
+    var body: some View {
+        let installed = model.games.contains { $0.store == "epic" && $0.storeID == game.appName }
+        HStack(spacing: 14) {
+            GameCover(appID: 0, name: game.title, remote: game.cover)
+                .frame(width: 150 * zoom, height: 70 * zoom).clipShape(RoundedRectangle(cornerRadius: 6))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(game.title).zfont(13, .bold).lineLimit(1)
+                if let developer = game.developer { Text(developer).zfont(10).foregroundStyle(.secondary).lineLimit(1) }
+            }
+            Spacer(minLength: 12)
+            if let third = game.thirdPartyStore {
+                Text("Needs \(third)").zfont(10).foregroundStyle(.secondary).help("This game is delivered through another launcher, which Stirred does not run yet")
+            } else if installed {
+                Label("Installed", systemImage: "checkmark").zfont(10).foregroundStyle(.secondary)
+            } else if let progress = model.epicInstalls[game.appName] {
+                ProgressView(value: progress).frame(width: 120)
+                Text("\(Int(progress * 100))%").zfont(10).foregroundStyle(.secondary).monospacedDigit()
+            } else {
+                Button("Install") { model.installEpicGame(game) }
+            }
+        }
+        .padding(.vertical, 8)
+    }
 }
 
 struct AllGamesRow: View {
@@ -982,7 +1085,7 @@ struct DiskView: View {
                     }
                     GroupBox("Games") {
                         VStack(alignment: .leading, spacing: 8) {
-                            ForEach(model.games) { game in
+                            ForEach(model.games.filter { $0.store == "steam" }) { game in
                                 HStack {
                                     Text(game.name)
                                     Spacer()
