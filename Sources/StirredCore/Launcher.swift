@@ -196,14 +196,21 @@ public struct Launcher: Sendable {
         for exe in executables(of: game) {
             let arch = PEInfo.architecture(ofFile: exe)
             guard arch == .x86 || arch == .x64 else { continue }
+            // A game that only knows Direct3D 9 gets DXVK's d3d9 as well (Wine's own Direct3D 9 is slower and less complete).
+            // Games that also use a newer Direct3D keep the set that was verified with them.
+            let direct3D9 = Self.usesOnlyDirect3D9(GraphicsDetector.detect(executables: [exe]))
             try DXVKInstaller.install(package: dxvkPackage, executable: exe, architecture: arch, latency: plan.latency,
-                                      hud: options.hud, asyncShaders: options.asyncShaders, extra: plan.dxvkOptions)
-            for command in DXVKInstaller.registryCommands(executableName: exe.lastPathComponent) {
+                                      hud: options.hud, asyncShaders: options.asyncShaders, extra: plan.dxvkOptions, direct3D9: direct3D9)
+            for command in DXVKInstaller.registryCommands(executableName: exe.lastPathComponent, direct3D9: direct3D9) {
                 _ = try await runner.runAndWait(arguments: command)
             }
-            lines.append("dxvk installed for \(exe.lastPathComponent) (\(arch))")
+            lines.append("dxvk installed for \(exe.lastPathComponent) (\(arch)\(direct3D9 ? ", Direct3D 9" : ""))")
         }
         return lines
+    }
+
+    static func usesOnlyDirect3D9(_ apis: Set<GraphicsAPI>) -> Bool {
+        apis.contains(.d3d9) && apis.isDisjoint(with: [.d3d10, .d3d11, .d3d12, .vulkan])
     }
 
     // MARK: Game updater
@@ -229,7 +236,7 @@ public struct Launcher: Sendable {
         for exe in executables(of: game) {
             let folder = exe.deletingLastPathComponent()
             var removed = false
-            for name in DXVKInstaller.dlls + ["dxvk.conf"] {
+            for name in DXVKInstaller.allDlls + ["dxvk.conf"] {
                 let file = folder.appendingPathComponent(name)
                 if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file); removed = true }
             }

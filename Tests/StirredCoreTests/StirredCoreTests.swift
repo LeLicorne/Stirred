@@ -1677,3 +1677,63 @@ struct PresetTests {
         #expect(tool.binary(paths).path == "/tmp/x/tools/legendary-0.21.1/legendary")
     }
 }
+
+@Suite struct DXMTDiagnosisTests {
+    private func input(logs: String, backend: GraphicsBackend = .dxvk, dxmt: Bool) -> DiagnosisInput {
+        let game = Game(store: "steam", storeID: "4126040", name: "Aniimo", installDirectory: nil)
+        let plan = LaunchPlanner.plan(recipe: Recipe(appid: 4126040, name: "Aniimo", status: .unknown, graphics: backend), detectedAPIs: [.d3d11])
+        return DiagnosisInput(game: game, plan: plan, logs: logs, dxmtEngineInstalled: dxmt)
+    }
+
+    @Test func featureLevelFailureOffersDXMTInOneClick() {
+        let found = Diagnoser.diagnose(input(logs: "d3d11: Feature level 11.1 is unavailable; switching startup to Direct3D 12.", dxmt: true))
+        let hit = found.first { $0.id == "needs-dxmt" }
+        #expect(hit?.fix == .setGraphics(.dxmt))
+        #expect(DiagnosisFix.setGraphics(.dxmt).label.contains("DXMT"))
+    }
+
+    @Test func blackSceneSymptomIsRecognisedAndExplainsWhenTheEngineIsMissing() {
+        let logs = "[mvk-error] VK_ERROR_INITIALIZATION_FAILED: Render pipeline compile failed: Fragment input(s) `user(locn2)` mismatching vertex shader output type(s)"
+        let hit = Diagnoser.diagnose(input(logs: logs, dxmt: false)).first { $0.id == "needs-dxmt" }
+        #expect(hit != nil && hit?.fix == nil)
+        #expect(hit?.explanation.contains("build-dxmt-engine.sh") == true)
+    }
+
+    @Test func nothingIsOfferedOnceTheGameUsesDXMTOrWhenLogsAreClean() {
+        #expect(!Diagnoser.diagnose(input(logs: "Feature level 11.1 is unavailable", backend: .dxmt, dxmt: true)).contains { $0.id == "needs-dxmt" })
+        #expect(!Diagnoser.diagnose(input(logs: "all fine", dxmt: true)).contains { $0.id == "needs-dxmt" })
+    }
+
+    @Test func theFixIsSavedAsAPersonalSettingForAnyStore() async throws {
+        let paths = StirredPaths(root: FileManager.default.temporaryDirectory.appendingPathComponent("stirred-diag-\(UUID().uuidString)"))
+        let launcher = Launcher(paths: paths, recipesDirectory: paths.root, resourcesDirectory: paths.root)
+        let game = Game(store: "epic", storeID: "Salt", name: "Zeta", installDirectory: nil)
+        try await launcher.apply(.setGraphics(.dxmt), to: game)
+        #expect(launcher.overrides.read(game.key).graphics == .dxmt)
+    }
+}
+
+@Suite struct Direct3D9Tests {
+    @Test func onlyPureDirect3D9GamesGetDXVKsD3D9() {
+        #expect(Launcher.usesOnlyDirect3D9([.d3d9]))
+        #expect(!Launcher.usesOnlyDirect3D9([.d3d9, .d3d11]))
+        #expect(!Launcher.usesOnlyDirect3D9([.d3d11]))
+        #expect(!Launcher.usesOnlyDirect3D9([]))
+    }
+
+    @Test func installerCopiesAndRegistersD3D9OnlyWhenAsked() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("stirred-d3d9-\(UUID().uuidString)")
+        let package = root.appendingPathComponent("dxvk/x64"), game = root.appendingPathComponent("game")
+        try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: game, withIntermediateDirectories: true)
+        for name in DXVKInstaller.allDlls { try Data([1]).write(to: package.appendingPathComponent(name)) }
+        let exe = game.appendingPathComponent("old.exe")
+        try DXVKInstaller.install(package: root.appendingPathComponent("dxvk"), executable: exe, architecture: .x64)
+        #expect(!FileManager.default.fileExists(atPath: game.appendingPathComponent("d3d9.dll").path))
+        let copied = try DXVKInstaller.install(package: root.appendingPathComponent("dxvk"), executable: exe, architecture: .x64, direct3D9: true)
+        #expect(copied.map(\.lastPathComponent).contains("d3d9.dll"))
+        #expect(DXVKInstaller.registryCommands(executableName: "old.exe").count == 3)
+        let commands = DXVKInstaller.registryCommands(executableName: "old.exe", direct3D9: true)
+        #expect(commands.count == 4 && commands.last?.contains("d3d9") == true)
+    }
+}

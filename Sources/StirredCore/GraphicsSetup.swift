@@ -64,12 +64,16 @@ public enum DXVKConfig {
 /// reach the game; and a global override would also affect the Steam client itself.
 public enum DXVKInstaller {
     public static let dlls = ["d3d11.dll", "dxgi.dll", "d3d10core.dll"]
+    /// Direct3D 9 goes through DXVK too, but only for games that use nothing newer (see `Launcher.prepareGraphics`).
+    public static let direct3D9 = "d3d9.dll"
+    /// Everything DXVK may have put next to an executable (for removal).
+    public static let allDlls = dlls + [direct3D9]
 
     /// `package` is a folder containing `x32/` and `x64/` (the DXVK release layout).
     @discardableResult
     public static func install(
         package: URL, executable: URL, architecture: PEArchitecture, latency: LatencyProfile = .low,
-        hud: Bool = false, asyncShaders: Bool = false, extra: [String: String] = [:]
+        hud: Bool = false, asyncShaders: Bool = false, extra: [String: String] = [:], direct3D9: Bool = false
     ) throws -> [URL] {
         let subdirectory: String
         switch architecture {
@@ -80,7 +84,7 @@ public enum DXVKInstaller {
         let source = package.appendingPathComponent(subdirectory, isDirectory: true)
         let destination = executable.deletingLastPathComponent()
         var copied: [URL] = []
-        for name in dlls {
+        for name in dlls + (direct3D9 ? [Self.direct3D9] : []) {
             let from = source.appendingPathComponent(name)
             let to = destination.appendingPathComponent(name)
             if FileManager.default.fileExists(atPath: to.path) { try FileManager.default.removeItem(at: to) }
@@ -94,8 +98,8 @@ public enum DXVKInstaller {
     }
 
     /// `wine reg add ...` argument lists that make Wine load our native DLLs for this executable only.
-    public static func registryCommands(executableName: String) -> [[String]] {
-        dlls.map { dll in
+    public static func registryCommands(executableName: String, direct3D9: Bool = false) -> [[String]] {
+        (dlls + (direct3D9 ? [Self.direct3D9] : [])).map { dll in
             ["reg", "add", "HKCU\\Software\\Wine\\AppDefaults\\\(executableName)\\DllOverrides",
              "/v", String(dll.dropLast(4)), "/d", "native,builtin", "/f"]
         }

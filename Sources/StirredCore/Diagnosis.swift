@@ -16,6 +16,7 @@ public enum DiagnosisFix: Sendable, Equatable {
     case reinstallGraphics
     case repairSteamDisplayFix
     case cleanUpProcesses
+    case setGraphics(GraphicsBackend)
 
     public var label: String {
         switch self {
@@ -25,6 +26,7 @@ public enum DiagnosisFix: Sendable, Equatable {
         case .reinstallGraphics: "Reinstall the graphics layer"
         case .repairSteamDisplayFix: "Repair Steam's display fix"
         case .cleanUpProcesses: "Clean up stuck processes"
+        case .setGraphics(let backend): backend == .dxmt ? "Use the DXMT engine for this game" : "Use \(backend.rawValue.uppercased()) for this game"
         }
     }
 }
@@ -56,17 +58,21 @@ public struct DiagnosisInput: Sendable {
     public var executableArchitecture: PEArchitecture
     /// Wine processes alive although Steam itself is not running (left behind by a crash).
     public var staleProcessCount: Int
+    /// Whether the optional DXMT engine is installed (it draws what DXVK on MoltenVK cannot).
+    public var dxmtEngineInstalled: Bool = false
 
     public init(
         game: Game, recipe: Recipe? = nil, plan: LaunchPlan, power: PowerState = PowerState(lowPowerMode: false, onBattery: false),
         setupComplete: Bool = true, steamDisplayFixInstalled: Bool = true, freeDiskBytes: Int64? = nil, logs: String = "",
         lastSession: SessionRecord? = nil, lastSessionCrashed: Bool = false, dxvkInstalledForGame: Bool = true,
-        isUnity: Bool = false, executableArchitecture: PEArchitecture = .x64, staleProcessCount: Int = 0
+        isUnity: Bool = false, executableArchitecture: PEArchitecture = .x64, staleProcessCount: Int = 0,
+        dxmtEngineInstalled: Bool = false
     ) {
         self.game = game; self.recipe = recipe; self.plan = plan; self.power = power; self.setupComplete = setupComplete
         self.steamDisplayFixInstalled = steamDisplayFixInstalled; self.freeDiskBytes = freeDiskBytes; self.logs = logs
         self.lastSession = lastSession; self.lastSessionCrashed = lastSessionCrashed; self.dxvkInstalledForGame = dxvkInstalledForGame
         self.isUnity = isUnity; self.executableArchitecture = executableArchitecture; self.staleProcessCount = staleProcessCount
+        self.dxmtEngineInstalled = dxmtEngineInstalled
     }
 }
 
@@ -105,6 +111,24 @@ public enum Diagnoser {
                 out.append(Diagnosis(id: "unity-vulkan", severity: .problem, title: "Unity used Vulkan: textures can be missing",
                                      explanation: "Through MoltenVK, Vulkan shows missing texture tiles. Forcing DirectX 11 (through DXVK) fixes it.",
                                      fix: .addLaunchArgument("-force-d3d11")))
+            }
+        }
+        // What DXVK on MoltenVK cannot do, and DXMT can: Direct3D feature level 11.1 (the game then tries DirectX 12 and gives up),
+        // and geometry shaders (menus draw, the 3D scene stays black).
+        if input.plan.backend == .dxvk {
+            let needsLevel = logs.contains("Feature level 11.1 is unavailable") || logs.contains("InitializeEngineGraphics failed")
+            let blackScene = logs.contains("mismatching vertex shader output")
+            if needsLevel || blackScene {
+                let what = needsLevel ? "The game could not start its graphics" : "The 3D scene probably stays black"
+                let why = needsLevel
+                    ? "It asks for a Direct3D level the standard graphics layer (DXVK on MoltenVK) cannot offer."
+                    : "It uses geometry shaders, which the standard graphics layer (DXVK on MoltenVK) cannot run: menus draw, the 3D world does not."
+                out.append(Diagnosis(
+                    id: "needs-dxmt", severity: .problem, title: what,
+                    explanation: input.dxmtEngineInstalled
+                        ? "\(why) The DXMT engine handles it. Stirred restarts Steam with that engine the next time you press Play."
+                        : "\(why) The optional DXMT engine handles it, but it is not installed: build it with Scripts/build-dxmt-engine.sh (see docs/DXMT.md).",
+                    fix: input.dxmtEngineInstalled ? .setGraphics(.dxmt) : nil))
             }
         }
         if input.plan.backend == .dxvk && !input.dxvkInstalledForGame {
@@ -218,7 +242,7 @@ extension Launcher {
             } ?? true,
             isUnity: folder.map { FileManager.default.fileExists(atPath: $0.appendingPathComponent("UnityPlayer.dll").path) } ?? false,
             executableArchitecture: executable.map { PEInfo.architecture(ofFile: $0) } ?? .unknown,
-            staleProcessCount: stale)
+            staleProcessCount: stale, dxmtEngineInstalled: EngineLocator.dxmt(paths: paths) != nil)
     }
 
     public func diagnose(_ game: Game) -> [Diagnosis] { Diagnoser.diagnose(diagnosisInput(for: game)) }
@@ -233,6 +257,8 @@ extension Launcher {
             try overrides.update(key) { $0.launchArgs = ($0.launchArgs ?? []) + [argument] }
         case .setLaunchMode(let mode):
             try overrides.update(key) { $0.launchMode = mode }
+        case .setGraphics(let backend):
+            try overrides.update(key) { $0.graphics = backend }
         case .reinstallGraphics:
             onPhase("Reinstalling the graphics layer…")
             try await prepareGraphics(for: game, plan: plan(for: game), options: LaunchOptions())
