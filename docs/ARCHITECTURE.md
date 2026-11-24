@@ -331,8 +331,9 @@ Every destructive operation first closes Steam gracefully so Steam does not writ
 | Screen | Purpose |
 |---|---|
 | Library | cards, Play / Stop, preset picker, card-size slider (or pinch) |
-| All my games | whole owned library, ranked; Install |
-| Check a game | verdict for any app id or link |
+| All my games | every game you own on Steam and Epic, ranked, with a store filter; Install |
+| Check a game | verdict for any Steam app id or link |
+| Accounts | Steam status, Epic sign-in (and later other stores) |
 | Disk | space, cleanup, move games, game-data backups |
 | Engine | installed engines, tested updates, rollback |
 | Activity | running games, live CPU / GPU |

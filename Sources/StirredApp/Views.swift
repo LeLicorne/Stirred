@@ -3,10 +3,10 @@ import Charts
 import StirredCore
 
 enum Section: String, CaseIterable, Identifiable {
-    case library = "Library", all = "All my games", check = "Check a game", stores = "Stores", disk = "Disk", engine = "Engine", activity = "Activity", logs = "Logs"
+    case library = "Library", all = "All my games", check = "Check a game", stores = "Accounts", disk = "Disk", engine = "Engine", activity = "Activity", logs = "Logs"
     var id: String { rawValue }
     var icon: String {
-        switch self { case .library: "gamecontroller"; case .all: "square.grid.2x2"; case .check: "magnifyingglass"; case .stores: "bag"; case .disk: "internaldrive"; case .engine: "gearshape.2"; case .activity: "waveform.path.ecg"; case .logs: "doc.text.magnifyingglass" }
+        switch self { case .library: "gamecontroller"; case .all: "square.grid.2x2"; case .check: "magnifyingglass"; case .stores: "person.crop.circle"; case .disk: "internaldrive"; case .engine: "gearshape.2"; case .activity: "waveform.path.ecg"; case .logs: "doc.text.magnifyingglass" }
     }
 }
 
@@ -175,7 +175,7 @@ struct LibraryView: View {
                 if model.engineName == nil {
                     Banner(text: "No Wine engine found. Run Scripts/assemble-engine.sh, then relaunch.", color: .red)
                 }
-                ForEach(model.warnings, id: \.self) { Banner(text: $0, color: .yellow) }
+                if !model.warnings.isEmpty { Banner(text: model.warnings.joined(separator: " "), color: .yellow) }
                 if let update = model.engineStatus?.updates.first {
                     Banner(text: "A tested engine update is available (Wine \(update.version)). Install it from the Engine section.", color: .blue)
                 }
@@ -456,68 +456,117 @@ extension VerdictLevel {
     }
 }
 
+/// One row of "All my games", whatever store the game comes from.
+struct OwnedGame: Identifiable {
+    enum Source { case steam(LibraryEntry), epic(EpicGame) }
+    let source: Source
+    let store: String
+    let name: String
+    let verdict: Verdict
+    let installed: Bool
+    var id: String { "\(store):\(name):\(keyID)" }
+    var keyID: String {
+        switch source { case .steam(let entry): String(entry.appID); case .epic(let game): game.appName }
+    }
+}
+
 struct AllGamesView: View {
     @Environment(AppModel.self) private var model
     @State private var shown: Set<VerdictLevel> = [.works, .native, .likely, .maybe, .unknown]
     @State private var search = ""
+    /// "" = every store.
+    @State private var storeFilter = ""
 
     private var levels: [VerdictLevel] { [.works, .native, .likely, .maybe, .unknown, .no] }
-    private func count(_ level: VerdictLevel) -> Int { model.allGames.filter { $0.verdict.level == level }.count }
 
-    private var rows: [LibraryEntry] {
-        model.allGames
+    private var everything: [OwnedGame] {
+        let installedEpic = Set(model.games.filter { $0.store == "epic" }.map(\.storeID))
+        let steam = model.allGames.map { OwnedGame(source: .steam($0), store: "steam", name: $0.name, verdict: $0.verdict, installed: $0.installed) }
+        let epic = model.epicLibrary.map { game in
+            OwnedGame(source: .epic(game), store: "epic", name: game.title,
+                      verdict: model.epicVerdicts[game.appName] ?? EpicVerdict.evaluate(game, recipe: nil),
+                      installed: installedEpic.contains(game.appName))
+        }
+        return steam + epic
+    }
+
+    private var inStore: [OwnedGame] { storeFilter.isEmpty ? everything : everything.filter { $0.store == storeFilter } }
+    private func count(_ level: VerdictLevel) -> Int { inStore.filter { $0.verdict.level == level }.count }
+
+    private var rows: [OwnedGame] {
+        inStore
             .filter { shown.contains($0.verdict.level) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search)) }
-            .sorted { $0.verdict.level.rank != $1.verdict.level.rank ? $0.verdict.level.rank < $1.verdict.level.rank : $0.name < $1.name }
+            .sorted { $0.verdict.level.rank != $1.verdict.level.rank ? $0.verdict.level.rank < $1.verdict.level.rank
+                      : $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private var headline: String {
+        if everything.isEmpty { return "Reading your libraries…" }
+        let steam = model.allGames.count, epic = model.epicLibrary.count
+        let parts = [steam > 0 ? "\(steam) on Steam" : nil, epic > 0 ? "\(epic) on Epic Games" : nil].compactMap { $0 }
+        return "\(everything.count) games you own (\(parts.joined(separator: ", "))), ranked by how likely they are to run"
     }
 
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
                 if let error = model.allGamesError {
-                    Banner(text: error, color: .orange)
-                    Button("Open Steam") { model.openSteamWindow() }
-                } else {
-                    Text(model.allGames.isEmpty ? "Reading your Steam library…" : "\(model.allGames.count) games you own, ranked by how likely they are to run")
-                        .zfont(13, .bold)
-                    HStack(spacing: 8) {
-                        ForEach(levels, id: \.self) { level in
-                            Toggle(isOn: Binding(get: { shown.contains(level) },
-                                                 set: { if $0 { shown.insert(level) } else { shown.remove(level) } })) {
-                                Text("\(level.title) \(count(level))")
-                            }
-                            .toggleStyle(.button).tint(level.color)
-                        }
-                    }
-                    TextField("Search your games", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 320)
-                    if let progress = model.refining {
-                        HStack(spacing: 10) {
-                            ProgressView(value: Double(progress.done), total: Double(max(progress.total, 1))).frame(maxWidth: 260)
-                            Text("Checking Steam store details \(progress.done)/\(progress.total): verdicts keep improving")
-                                .zfont(10).foregroundStyle(.secondary)
-                            Button("Stop") { model.stopRefining() }.controlSize(.small)
-                        }
+                    HStack {
+                        Banner(text: error, color: .orange)
+                        Button("Open Steam") { model.openSteamWindow() }
                     }
                 }
+                Text(headline).zfont(13, .bold)
+                if !model.epicLibrary.isEmpty {
+                    Picker("Store", selection: $storeFilter) {
+                        Text("All stores").tag("")
+                        Text("Steam").tag("steam")
+                        Text("Epic Games").tag("epic")
+                    }
+                    .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 360)
+                }
+                HStack(spacing: 8) {
+                    ForEach(levels, id: \.self) { level in
+                        Toggle(isOn: Binding(get: { shown.contains(level) },
+                                             set: { if $0 { shown.insert(level) } else { shown.remove(level) } })) {
+                            Text("\(level.title) \(count(level))")
+                        }
+                        .toggleStyle(.button).tint(level.color)
+                    }
+                }
+                TextField("Search your games", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 320)
+                if let progress = model.refining {
+                    HStack(spacing: 10) {
+                        ProgressView(value: Double(progress.done), total: Double(max(progress.total, 1))).frame(maxWidth: 260)
+                        Text("Checking Steam store details \(progress.done)/\(progress.total): verdicts keep improving")
+                            .zfont(10).foregroundStyle(.secondary)
+                        Button("Stop") { model.stopRefining() }.controlSize(.small)
+                    }
+                }
+                if let error = model.epicError { Text(error).zfont(11).foregroundStyle(.red) }
             }
             .padding(16).frame(maxWidth: .infinity, alignment: .leading)
             Divider()
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(rows) { entry in
-                        AllGamesRow(entry: entry)
+                    ForEach(rows) { item in
+                        OwnedGameRow(item: item)
                         Divider()
                     }
                 }
                 .padding(.horizontal, 16)
-                if rows.isEmpty && !model.allGames.isEmpty {
+                if rows.isEmpty && !everything.isEmpty {
                     Text("No game matches these filters.").foregroundStyle(.secondary).padding(40)
                 }
             }
-            Text("Based on Steam's own data and Steam Deck status: a hint, not a promise. Tested games are marked Tested.")
+            Text("Steam: based on Steam's own data and Steam Deck status. Epic Games: Stirred's own tests only. A hint, not a promise.")
                 .zfont(9).foregroundStyle(.secondary).padding(8)
         }
         .navigationTitle("All my games")
-        .task { if model.allGames.isEmpty { model.loadAllGames() } }
+        .task {
+            if model.allGames.isEmpty { model.loadAllGames() }
+            if model.epicLibrary.isEmpty { model.refreshEpic() }
+        }
     }
 }
 
@@ -545,16 +594,12 @@ extension View {
     func zfont(_ size: CGFloat, _ weight: Font.Weight = .regular, mono: Bool = false) -> some View { modifier(ZoomedFont(size: size, weight: weight, mono: mono)) }
 }
 
-// MARK: - Stores
+// MARK: - Accounts
 
+/// Which stores Stirred is connected to. The games themselves are in All my games and, once installed, in the Library.
 struct StoresView: View {
     @Environment(AppModel.self) private var model
     @State private var pastedCode = ""
-    @State private var search = ""
-
-    private var shown: [EpicGame] {
-        search.isEmpty ? model.epicLibrary : model.epicLibrary.filter { $0.title.localizedCaseInsensitiveContains(search) }
-    }
 
     var body: some View {
         ScrollView {
@@ -565,6 +610,7 @@ struct StoresView: View {
                               systemImage: model.steam == .ready ? "checkmark.circle.fill" : "circle")
                         Spacer()
                         Text("\(model.games.filter { $0.store == "steam" }.count) installed").foregroundStyle(.secondary)
+                        Button("Open Steam") { model.openSteamWindow() }
                     }.padding(6)
                 }
                 GroupBox("Epic Games") {
@@ -579,17 +625,12 @@ struct StoresView: View {
                             HStack {
                                 Label("Signed in as \(account)", systemImage: "checkmark.circle.fill")
                                 Spacer()
-                                Button("Refresh my games") { model.epicBusy = "Loading your games…"; model.refreshEpic(reloadLibrary: true) }.disabled(model.epicBusy != nil)
+                                Text("\(model.epicLibrary.count) games, \(model.games.filter { $0.store == "epic" }.count) installed").foregroundStyle(.secondary)
+                                Button("Refresh") { model.epicBusy = "Loading your games…"; model.refreshEpic(reloadLibrary: true) }.disabled(model.epicBusy != nil)
                                 Button("Sign out") { model.signOutOfEpic() }
                             }
-                            TextField("Search your Epic games", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 320)
-                            if model.epicLibrary.isEmpty { Text("No Windows game found on this account yet.").foregroundStyle(.secondary) }
-                            LazyVStack(spacing: 0) {
-                                ForEach(shown) { game in
-                                    EpicRow(game: game)
-                                    Divider()
-                                }
-                            }
+                            Text("Your Epic games are listed in All my games, next to your Steam games. Installed ones appear in the Library.")
+                                .zfont(11).foregroundStyle(.secondary)
                         } else {
                             Text("1. Open Epic's sign-in page and sign in there (Stirred never sees your password).\n2. The page then shows a short text containing an authorizationCode: copy it.\n3. Paste it here.")
                                 .zfont(12).foregroundStyle(.secondary)
@@ -603,68 +644,59 @@ struct StoresView: View {
                     }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 GroupBox("Other stores") {
-                    Text("GOG, Ubisoft Connect, EA App and Battle.net are not available yet. See the roadmap.")
+                    Text("GOG, Ubisoft Connect, EA App and Battle.net are not available yet.")
                         .zfont(12).foregroundStyle(.secondary).padding(6).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .padding(24)
         }
-        .navigationTitle("Stores")
+        .navigationTitle("Accounts")
         .task { model.refreshEpic() }
     }
 }
 
-struct EpicRow: View {
+
+struct OwnedGameRow: View {
     @Environment(AppModel.self) private var model
     @Environment(\.uiZoom) private var zoom
-    let game: EpicGame
-
-    var body: some View {
-        let installed = model.games.contains { $0.store == "epic" && $0.storeID == game.appName }
-        HStack(spacing: 14) {
-            GameCover(appID: 0, name: game.title, remote: game.cover)
-                .frame(width: 150 * zoom, height: 70 * zoom).clipShape(RoundedRectangle(cornerRadius: 6))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(game.title).zfont(13, .bold).lineLimit(1)
-                if let developer = game.developer { Text(developer).zfont(10).foregroundStyle(.secondary).lineLimit(1) }
-            }
-            Spacer(minLength: 12)
-            if let third = game.thirdPartyStore {
-                Text("Needs \(third)").zfont(10).foregroundStyle(.secondary).help("This game is delivered through another launcher, which Stirred does not run yet")
-            } else if installed {
-                Label("Installed", systemImage: "checkmark").zfont(10).foregroundStyle(.secondary)
-            } else if let progress = model.epicInstalls[game.appName] {
-                ProgressView(value: progress).frame(width: 120)
-                Text("\(Int(progress * 100))%").zfont(10).foregroundStyle(.secondary).monospacedDigit()
-            } else {
-                Button("Install") { model.installEpicGame(game) }
-            }
-        }
-        .padding(.vertical, 8)
-    }
-}
-
-struct AllGamesRow: View {
-    @Environment(AppModel.self) private var model
-    let entry: LibraryEntry
-    @Environment(\.uiZoom) private var zoom
+    let item: OwnedGame
 
     var body: some View {
         HStack(spacing: 14) {
-            GameCover(appID: entry.appID, name: entry.name)
-                .frame(width: 150 * zoom, height: 70 * zoom).clipShape(RoundedRectangle(cornerRadius: 6))
+            cover.frame(width: 150 * zoom, height: 70 * zoom).clipShape(RoundedRectangle(cornerRadius: 6))
             VStack(alignment: .leading, spacing: 3) {
-                Text(entry.name).zfont(13, .bold).lineLimit(1)
-                Text(entry.verdict.reasons.first ?? entry.verdict.headline)
+                HStack(spacing: 6) {
+                    Text(item.name).zfont(13, .bold).lineLimit(1)
+                    if item.store != "steam" {
+                        Text(Stores.displayName(item.store)).zfont(9, .bold).padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color.accentColor.opacity(0.2), in: Capsule())
+                    }
+                }
+                Text(item.verdict.reasons.first ?? item.verdict.headline)
                     .zfont(10).foregroundStyle(.secondary).lineLimit(2)
             }
             Spacer(minLength: 12)
-            Text(entry.verdict.level.title).zfont(10, .bold).padding(.horizontal, 8).padding(.vertical, 3)
-                .background(entry.verdict.level.color.opacity(0.25), in: Capsule())
-            Group {
-                if entry.installed {
-                    Label("Installed", systemImage: "checkmark").zfont(10).foregroundStyle(.secondary)
-                } else if let phase = model.installPhase[entry.appID] {
+            Text(item.verdict.level.title).zfont(10, .bold).padding(.horizontal, 8).padding(.vertical, 3)
+                .background(item.verdict.level.color.opacity(0.25), in: Capsule())
+            action.frame(width: 130, alignment: .trailing)
+        }
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder private var cover: some View {
+        switch item.source {
+        case .steam(let entry): GameCover(appID: entry.appID, name: entry.name)
+        case .epic(let game): GameCover(appID: 0, name: game.title, remote: game.cover)
+        }
+    }
+
+    @ViewBuilder private var action: some View {
+        if item.installed {
+            Label("Installed", systemImage: "checkmark").zfont(10).foregroundStyle(.secondary)
+        } else {
+            switch item.source {
+            case .steam(let entry):
+                if let phase = model.installPhase[entry.appID] {
                     ProgressView().controlSize(.small).help(phase)
                 } else if entry.verdict.level == .native {
                     Text("Use the Mac version").zfont(10).foregroundStyle(.secondary)
@@ -672,10 +704,19 @@ struct AllGamesRow: View {
                     Button("Install") { model.installGame(appID: entry.appID) }.controlSize(.small)
                         .disabled(model.engineName == nil)
                 }
+            case .epic(let game):
+                if let progress = model.epicInstalls[game.appName] {
+                    HStack(spacing: 6) {
+                        ProgressView(value: progress).frame(width: 70)
+                        Text("\(Int(progress * 100))%").zfont(10).foregroundStyle(.secondary).monospacedDigit()
+                    }
+                } else if game.thirdPartyStore != nil {
+                    Text("Not available").zfont(10).foregroundStyle(.secondary)
+                } else {
+                    Button("Install") { model.installEpicGame(game) }.controlSize(.small)
+                }
             }
-            .frame(width: 130, alignment: .trailing)
         }
-        .padding(.vertical, 8)
     }
 }
 
@@ -891,6 +932,9 @@ struct SessionDetail: View {
                         Metric(title: "Game CPU (avg)", value: cpu.map { "\(Int($0.avg))%" } ?? "n/a", icon: "speedometer")
                         Metric(title: "Memory (max)", value: mem.map { "\(Int($0.max)) MB" } ?? "n/a", icon: "memorychip")
                         Metric(title: "Graphics", value: "\(record.backend.uppercased()) · \(record.latency)", icon: "paintpalette")
+                        if let fps = record.fps {
+                            Metric(title: "FPS (avg / 1% low)", value: "\(Int(fps.averageFPS)) / \(Int(fps.onePercentLowFPS))", icon: "gauge.with.dots.needle.67percent")
+                        }
                     }
 
                     if !points.isEmpty {
@@ -919,8 +963,10 @@ struct SessionDetail: View {
 
                     Text("\(record.system.chip) · \(record.system.memoryGB) GB · macOS \(record.system.macOS)")
                         .zfont(10).foregroundStyle(.secondary)
-                    Text("FPS are not recorded: turn on “FPS overlay” in the Library and take a screenshot.")
-                        .zfont(10).foregroundStyle(.secondary)
+                    if record.fps == nil {
+                        Text("FPS were not measured for this session: turn on “FPS overlay” in the Library before playing and Stirred records them.")
+                            .zfont(10).foregroundStyle(.secondary)
+                    }
                 }
 
                 HStack {
@@ -1085,11 +1131,16 @@ struct DiskView: View {
                     }
                     GroupBox("Games") {
                         VStack(alignment: .leading, spacing: 8) {
-                            ForEach(model.games.filter { $0.store == "steam" }) { game in
+                            ForEach(model.games) { game in
                                 HStack {
                                     Text(game.name)
+                                    if game.store != "steam" { Text(Stores.displayName(game.store)).zfont(10).foregroundStyle(.secondary) }
                                     Spacer()
                                     Text(game.sizeOnDisk.map(size) ?? "").foregroundStyle(.secondary)
+                                    if game.store != "steam" {
+                                        Text("stays on this Mac").zfont(10).foregroundStyle(.secondary)
+                                            .help("Only Steam games can be moved to another disk for now")
+                                    } else {
                                     switch model.location(of: game) {
                                     case .thisMac:
                                         Button("Move to another disk…") { model.moveToAnotherDisk(game) }.disabled(model.phases[game.id] != nil)
@@ -1098,10 +1149,11 @@ struct DiskView: View {
                                     case .missing:
                                         Label("Disk not connected", systemImage: "externaldrive.badge.xmark").foregroundStyle(.red)
                                     }
+                                    }
                                     if let phase = model.phases[game.id] { Text(phase).zfont(10).foregroundStyle(.secondary) }
                                 }
                             }
-                            Text("A moved game stays in your Steam library and starts as before; plug the disk in before playing it.")
+                            Text("A moved Steam game stays in your library and starts as before; plug the disk in before playing it.")
                                 .zfont(10).foregroundStyle(.secondary)
                         }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -1187,6 +1239,20 @@ struct EngineView: View {
                                 if engine.name == status?.active?.name { Text("in use").foregroundStyle(.secondary) }
                                 else { Button("Remove", role: .destructive) { model.removeEngine(engine.name) }.disabled(model.engineBusy != nil) }
                             }
+                        }
+                        if let dxmt = model.dxmtEngineName {
+                            HStack(alignment: .firstTextBaseline) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(dxmt)
+                                    Text("Optional: draws Direct3D 11 through Metal for the games that need it (Unreal games, recipes set to DXMT). Never used by default.")
+                                        .zfont(10).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Text("for DXMT games").foregroundStyle(.secondary)
+                            }
+                        } else {
+                            Text("The optional DXMT engine is not installed (Scripts/build-dxmt-engine.sh). Without it, games set to DXMT use DXVK.")
+                                .zfont(10).foregroundStyle(.secondary)
                         }
                     }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
                 }

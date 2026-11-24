@@ -309,3 +309,27 @@ public struct EpicProvider: GameStoreProvider {
         return line.replacingOccurrences(of: #"^\[[^\]]*\]\s*[A-Z]+:\s*"#, with: "", options: .regularExpression)
     }
 }
+
+/// What Stirred can say about an Epic game without running it: our own tests (recipe), the anti-cheat registry, and whether it
+/// needs another launcher. Epic publishes no Steam Deck status, so an untested game stays "Unknown".
+public enum EpicVerdict {
+    public static func evaluate(_ game: EpicGame, recipe: Recipe?) -> Verdict {
+        if let recipe {
+            switch recipe.status {
+            case .unsupported:
+                let why = recipe.blockers?.joined(separator: ", ") ?? "a known incompatibility"
+                return Verdict(level: .no, headline: "Won't run", reasons: ["Blocked by \(why)."])
+            case .perfect, .playable:
+                if recipe.verified { return Verdict(level: .works, headline: "Tested", reasons: [recipe.notes ?? "Tested with Stirred."]) }
+            default: break
+            }
+            if let notes = recipe.notes { return Verdict(level: .maybe, headline: "Experimental", reasons: [notes]) }
+        }
+        if let store = game.thirdPartyStore {
+            return Verdict(level: .no, headline: "Needs another launcher",
+                           reasons: ["Delivered through \(store), which Stirred does not run yet."])
+        }
+        return Verdict(level: .unknown, headline: "Unknown",
+                       reasons: ["Not tested yet. Install it and press Play: Stirred records how it ran."])
+    }
+}

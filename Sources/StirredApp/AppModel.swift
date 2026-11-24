@@ -502,6 +502,10 @@ final class AppModel {
     var epicToolInstalled = false
     var epicAccount: String?
     var epicLibrary: [EpicGame] = []
+    /// Name of the optional DXMT engine when installed.
+    var dxmtEngineName: String? { EngineLocator.dxmt(paths: launcher.paths)?.name }
+    /// App name -> verdict, computed with the library (reading recipes for hundreds of games at every redraw would be slow).
+    var epicVerdicts: [String: Verdict] = [:]
     var epicBusy: String?
     var epicError: String?
     /// App name -> 0...1 while an Epic game downloads.
@@ -518,8 +522,12 @@ final class AppModel {
             if account != nil {
                 do { library = try epic.library(refresh: reloadLibrary) } catch { problem = "\(error)" }
             }
+            var verdicts: [String: Verdict] = [:]
+            for game in library {
+                verdicts[game.appName] = EpicVerdict.evaluate(game, recipe: launcher.recipes.recipe(for: GameKey(store: "epic", id: game.appName)))
+            }
             await MainActor.run {
-                self?.epicToolInstalled = installed; self?.epicAccount = account; self?.epicLibrary = library
+                self?.epicToolInstalled = installed; self?.epicAccount = account; self?.epicLibrary = library; self?.epicVerdicts = verdicts
                 if let problem { self?.epicError = problem }
                 self?.epicBusy = nil
             }

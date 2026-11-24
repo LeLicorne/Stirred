@@ -1795,3 +1795,23 @@ struct PresetTests {
         #expect(LaunchPlanner.plan(recipe: nil, detectedAPIs: [.d3d11]).environment["MTL_HUD_LOG_ENABLED"] == nil)
     }
 }
+
+@Suite struct EpicVerdictTests {
+    private let game = EpicGame(appName: "Salt", title: "Zeta", developer: nil, cover: nil, thirdPartyStore: nil)
+
+    @Test func untestedIsUnknownAndOtherLaunchersWontRun() {
+        #expect(EpicVerdict.evaluate(game, recipe: nil).level == .unknown)
+        var origin = game; origin.thirdPartyStore = "Origin"
+        let verdict = EpicVerdict.evaluate(origin, recipe: nil)
+        #expect(verdict.level == .no && verdict.reasons[0].contains("Origin"))
+    }
+
+    @Test func recipesDecideFirst() {
+        let blocked = Recipe(appid: 0, name: "Zeta", status: .unsupported, blockers: ["anti-cheat (Easy Anti-Cheat)"], store: "epic", gameId: "Salt")
+        #expect(EpicVerdict.evaluate(game, recipe: blocked).level == .no)
+        let tested = Recipe(appid: 0, name: "Zeta", status: .playable, verified: true, notes: "Fine.", store: "epic", gameId: "Salt")
+        #expect(EpicVerdict.evaluate(game, recipe: tested).level == .works)
+        let trial = Recipe(appid: 0, name: "Zeta", status: .experimental, notes: "Starts.", store: "epic", gameId: "Salt")
+        #expect(EpicVerdict.evaluate(game, recipe: trial).level == .maybe)
+    }
+}
