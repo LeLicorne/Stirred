@@ -10,7 +10,10 @@ Measured on an Apple M4, 16 GB, macOS 27, Wine staging 11.21 (Gcenx), DXVK-macOS
   The Gcenx **DXVK-macOS 1.10.3** fork works and is what Stirred uses.
 - DXVK logs MoltenVK limitations that can make an object or effect invisible: *"Render pipeline compile failed ... int4 cannot
   be read using MTLAttributeFormatUInt4"* and *"Transform feedback not supported"*. Session reports count them.
-- DirectX 12 (vkd3d-proton) is not wired up. Games that import `d3d12.dll` are forced to DX11 through their recipe when possible.
+- DirectX 12 does not work on this stack (checked 2026-11-24): vkd3d-proton 3.1 (latest release, GitHub, SHA-256 `b85ea821…`) refuses to create a device
+  on MoltenVK: "vkd3d_init_device_caps: Lacking support for transform feedback", `D3D12CreateDevice` returns `E_INVALIDARG`
+  (probe: `Tests/Integration/d3d12_clear.c`). Metal has no transform feedback, so this is not a setting. Games are forced to DirectX 11 when they
+  allow it (`-dx11` for Unreal, done automatically); DX12-only games do not run.
 
 ## Performance
 
