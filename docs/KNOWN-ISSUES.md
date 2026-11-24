@@ -146,3 +146,6 @@ Rosetta 2 is to be reduced after macOS 27 (check Apple's current notes). Stirred
 - Battle.net, by hand (2026-11-24): first run ended with "Battle.net Update Agent" error BLZBNTBTS0000005C (the Agent started, wrote 3 log lines and hung).
   With Wine's `locationapi` disabled (`HKCU\Software\Wine\DllOverrides`, now done by `try-launcher.sh`) the Agent answers requests and reads its
   product database. Whether the installation then completes is not known yet.
+- Battle.net, follow-up (2026-11-24): with `locationapi` disabled the installer **completes** (client 2.42.1 in `Program Files (x86)/Battle.net`).
+  The client itself then hangs right after "Opening IPC shared memory ... mode=server" (CPU 0 %, no window, no crash). Trial stopped there, per the plan's
+  one-session rule. Next idea if revisited: find what it waits for (a named mutex or shared-memory section, `WINEDEBUG=+sync,+file`).
