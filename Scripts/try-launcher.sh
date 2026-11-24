@@ -22,6 +22,8 @@ case "$ACTION" in
   install)
     mkdir -p "$WINEPREFIX" "$ROOT/downloads"
     [ -f "$WINEPREFIX/system.reg" ] || arch -x86_64 "$BIN/wine" wineboot -u >/dev/null 2>&1
+    # Battle.net's Update Agent hangs (error BLZBNTBTS0000005C) while Wine's location API is enabled.
+    [ "$NAME" = battlenet ] && arch -x86_64 "$BIN/wine" reg add 'HKCU\Software\Wine\DllOverrides' /v locationapi /d '' /f >/dev/null 2>&1
     [ -f "$ROOT/downloads/$FILE" ] || curl -fL -o "$ROOT/downloads/$FILE" "$URL"
     echo "Installer window opening: follow it. Then: Scripts/try-launcher.sh $NAME run"
     arch -x86_64 "$BIN/wine" "$ROOT/downloads/$FILE" > "$LOG" 2>&1 ;;

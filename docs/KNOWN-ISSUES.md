@@ -143,3 +143,6 @@ Rosetta 2 is to be reduced after macOS 27 (check Apple's current notes). Stirred
 - They stop there: the next step is a click (and, for EA, accepting EA's agreement), which only the user may do. Continue with
   `Scripts/try-launcher.sh battlenet` or `Scripts/try-launcher.sh ea`, then `... run` once installed. Integration into Stirred only if the client
   then shows its sign-in and library.
+- Battle.net, by hand (2026-11-24): first run ended with "Battle.net Update Agent" error BLZBNTBTS0000005C (the Agent started, wrote 3 log lines and hung).
+  With Wine's `locationapi` disabled (`HKCU\Software\Wine\DllOverrides`, now done by `try-launcher.sh`) the Agent answers requests and reads its
+  product database. Whether the installation then completes is not known yet.
