@@ -125,3 +125,11 @@ Rosetta 2 is to be reduced after macOS 27 (check Apple's current notes). Stirred
 - Not tried yet: the `uplay://` registry keys (only matter once the client runs), other Wine versions.
 - `Wrapper/steamwebhelper_wrapper.c` now takes `-DREAL_EXE=...` and `-DEXTRA_FLAGS=...` at build time, ready for another helper.
 - EA App and Battle.net trials are waiting for the same reason (their installers could not be downloaded from this network).
+
+### Ubisoft Connect, second trial with the network working (2026-11-24): stopped
+- The client now reaches Ubisoft's services, opens, then shows "Ubisoft Connect has detected an unrecoverable error" (crash dump in its `crashes/`).
+- Cause, from Wine's own trace: `UplayWebCore.exe` (its embedded Chromium) is a **32-bit** program and crashes inside `wow64cpu.dll`, Wine's layer that runs
+  32-bit Windows code on this 64-bit-only build ("Unhandled page fault ... at address 7BF41135", `wow64cpu.dll` loaded at `7BF40000`). Same family as
+  the 32-bit Unity crash above: a limit of Wine's WoW64 mode on macOS, not something a recipe or a wrapper fixes.
+- Decision (stop criterion of the plan): Ubisoft Connect is not supported; Trackmania stays blocked. To revisit when a newer Wine (or a build with the old
+  32-bit mode) is available: install it as an engine and re-run `UbisoftConnect.exe` in `prefixes/ubisoft`.
