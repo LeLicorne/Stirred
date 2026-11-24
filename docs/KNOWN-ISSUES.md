@@ -133,3 +133,10 @@ Rosetta 2 is to be reduced after macOS 27 (check Apple's current notes). Stirred
   the 32-bit Unity crash above: a limit of Wine's WoW64 mode on macOS, not something a recipe or a wrapper fixes.
 - Decision (stop criterion of the plan): Ubisoft Connect is not supported; Trackmania stays blocked. To revisit when a newer Wine (or a build with the old
   32-bit mode) is available: install it as an engine and re-run `UbisoftConnect.exe` in `prefixes/ubisoft`.
+
+### Battle.net and EA App trials (2026-11-24): waiting for a human click
+- Both official installers (downloaded from Blizzard's and EA's own addresses) start in their own Windows environment and **draw their window correctly**
+  under Wine (Battle.net: language picker; EA App: welcome screen with its user agreement). Both are 32-bit bootstrappers that worked, unlike Ubisoft's helper.
+- They stop there: the next step is a click (and, for EA, accepting EA's agreement), which only the user may do. Continue with
+  `Scripts/try-launcher.sh battlenet` or `Scripts/try-launcher.sh ea`, then `... run` once installed. Integration into Stirred only if the client
+  then shows its sign-in and library.
