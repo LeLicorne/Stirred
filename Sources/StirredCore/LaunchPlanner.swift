@@ -55,7 +55,8 @@ public enum LaunchPlanner {
 
         // 2. Environment: sensible defaults, then recipe overrides.
         var env: [String: String] = ["WINEMSYNC": "1", "WINEDEBUG": "-all"]
-        if hud { env["MTL_HUD_ENABLED"] = "1" }
+        // The Metal HUD also writes every frame's duration to the log: that is where Stirred's measured FPS come from.
+        if hud { env["MTL_HUD_ENABLED"] = "1"; env["MTL_HUD_LOG_ENABLED"] = "1" }
         if let overrides = recipe?.dllOverrides, !overrides.isEmpty {
             env["WINEDLLOVERRIDES"] = overrides
                 .sorted { $0.key < $1.key }

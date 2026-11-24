@@ -96,14 +96,14 @@ public struct SteamProvider: GameStoreProvider {
     }
 
     /// `firstRun`: Steam must be allowed to update itself, so no `-noverifyfiles -nobootstrapupdate`.
-    public func launchClient(silent: Bool = false, firstRun: Bool = false) throws -> Process {
+    public func launchClient(silent: Bool = false, firstRun: Bool = false, extraEnvironment: [String: String] = [:]) throws -> Process {
         guard isInstalled else { throw StirredError.steamNotInstalled }
         // Set at Steam start because games inherit Steam's environment: DXVK then logs every game to one folder.
         let dxvkLogs = logsDirectory.appendingPathComponent("dxvk", isDirectory: true)
         try FileManager.default.createDirectory(at: dxvkLogs, withIntermediateDirectories: true)
         let process = try runner.makeProcess(
             arguments: [steamExecutable.path] + (firstRun ? ["-no-cef-sandbox"] : Self.clientFlags) + (silent ? ["-silent"] : []),
-            extraEnvironment: ["WINEMSYNC": "1", "DXVK_LOG_PATH": dxvkLogs.path, "DXVK_LOG_LEVEL": "info"],
+            extraEnvironment: ["WINEMSYNC": "1", "DXVK_LOG_PATH": dxvkLogs.path, "DXVK_LOG_LEVEL": "info"].merging(extraEnvironment) { _, new in new },
             workingDirectory: steamRoot,
             logFile: logsDirectory.appendingPathComponent("steam-client.log"))
         try process.run()

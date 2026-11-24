@@ -313,7 +313,7 @@ public struct Launcher: Sendable {
     }
 
     /// `silent`: start minimised (no Steam window), only sensible once a login is remembered.
-    public func startSteam(silent: Bool, backend: GraphicsBackend? = nil) throws {
+    public func startSteam(silent: Bool, backend: GraphicsBackend? = nil, hud: Bool = false) throws {
         // Steam and its games share one Wine: the engine is chosen here, once, and remembered until Steam stops.
         if let backend {
             let chosen = try engine(for: backend)
@@ -324,7 +324,9 @@ public struct Launcher: Sendable {
         let steam = try steam()
         if let wrapper = wrapperURL { _ = try? WebHelperWrapper.ensure(steamRoot: steam.steamRoot, wrapper: wrapper) }
         // A windowless start only works when a login is remembered; otherwise the user must see the sign-in window.
-        _ = try steam.launchClient(silent: silent && steam.hasRememberedLogin)
+        try? ActiveEngine.write(paths, EngineLocator.steamHUDFile, value: hud ? "1" : nil)
+        _ = try steam.launchClient(silent: silent && steam.hasRememberedLogin,
+                                   extraEnvironment: hud ? ["MTL_HUD_ENABLED": "1", "MTL_HUD_LOG_ENABLED": "1"] : [:])
     }
 
     public func waitUntilSteamReady(since: Date, timeout: TimeInterval) async -> Bool {
@@ -404,6 +406,7 @@ public struct Launcher: Sendable {
         // Orphans whose command line is a Windows path (Steam's Chromium helpers) are not matched by the line above.
         _ = SystemSampler.run("/usr/bin/pkill", ["-9", "-f", #"steamwebhelper(_real)?\.exe"#])
         try? ActiveEngine.write(paths, EngineLocator.steamEngineFile, value: nil)
+        try? ActiveEngine.write(paths, EngineLocator.steamHUDFile, value: nil)
     }
 
     /// Stops the game and everything started from its folder (launchers, helpers). Steam keeps showing "Stopping"
@@ -477,12 +480,17 @@ public struct Launcher: Sendable {
             onPhase("Restarting Steam with the \(plan.backend == .dxmt ? "DXMT" : "standard") engine…")
             await quitSteam(graceful: true)
         }
+        // Same for the FPS overlay: the Metal HUD is part of Steam's environment, which its games inherit.
+        if steamState() != .stopped, (ActiveEngine.read(paths, EngineLocator.steamHUDFile) == "1") != options.hud {
+            onPhase(options.hud ? "Restarting Steam to turn the FPS overlay on…" : "Restarting Steam to turn the FPS overlay off…")
+            await quitSteam(graceful: true)
+        }
         if steamState() == .stopped {
             let remembered = (try? steam().hasRememberedLogin) ?? false
             onPhase(remembered ? "Starting Steam…" : "Sign in to Steam in the window that opens…")
             if !remembered { timeout = 600 }
             since = Date()
-            try startSteam(silent: true, backend: plan.backend)
+            try startSteam(silent: true, backend: plan.backend, hud: options.hud)
         }
         onPhase("Waiting for Steam…")
         guard await waitUntilSteamReady(since: since, timeout: timeout) else {

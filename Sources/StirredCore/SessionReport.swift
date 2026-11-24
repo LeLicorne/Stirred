@@ -65,6 +65,8 @@ public struct SessionRecord: Codable, Sendable, Equatable {
     public var startedSteam: Bool? = nil
     /// True only when the sampler waited for the game's process and it never appeared (a session that was not watched stays nil).
     public var neverDetected: Bool? = nil
+    /// Measured frame pacing, only for runs with the FPS overlay on (see `FrameStats`).
+    public var fps: FrameStats? = nil
 }
 
 // MARK: - Sampling
@@ -257,7 +259,11 @@ public enum ReportBuilder {
         if let cpu = stats(live.map(\.cpuPercent)) { md += "- CPU of the game: avg \(Int(cpu.avg))%, max \(Int(cpu.max))% (100% = one core, approximate)\n" }
         if let gpu = stats(live.compactMap { $0.gpuPercent.map(Double.init) }) { md += "- GPU (whole machine): avg \(Int(gpu.avg))%, max \(Int(gpu.max))%\n" }
         if let mem = stats(live.map { Double($0.rssMB) }) { md += "- Memory: avg \(Int(mem.avg)) MB, max \(Int(mem.max)) MB\n" }
-        md += "- FPS are not logged (DXVK only draws them on screen): use `--hud` and send a screenshot.\n\n"
+        if let fps = record.fps {
+            md += "- FPS (measured, \(fps.frames) frames): average \(fps.averageFPS), 1 % low \(fps.onePercentLowFPS), median frame \(fps.medianFrameMs) ms\n\n"
+        } else {
+            md += "- FPS: not measured. Turn the FPS overlay on (`--hud`) and Stirred records real frame times.\n\n"
+        }
         md += "## Plan\nEnvironment: " + (record.environment.isEmpty ? "(none)" : record.environment.sorted { $0.key < $1.key }.map { "`\($0.key)=\($0.value)`" }.joined(separator: " ")) + "\n"
         for warning in record.planWarnings { md += "- warning: \(warning)\n" }
         md += "\n## Key log lines\n"
@@ -355,6 +361,14 @@ public struct SessionRecorder: Sendable {
         // Steam writes `assert_<exe>` dumps for non-fatal assertions (e.g. overlay): the game usually keeps running.
         let assertions = gameDumps.filter { $0.hasPrefix("assert_") }
         let dumps = gameDumps.filter { !$0.hasPrefix("assert_") }
+        // Real frame times, when the FPS overlay was on: the Metal HUD wrote them to the game's (or Steam's) output.
+        var frameTimes: [Double] = []
+        for name in ["steam-client.log", "game-\(record.storeID).log", "game-\(record.store)-\(record.storeID).log"] {
+            if let text = LogCollector.tail(paths.logs.appendingPathComponent(name), maxBytes: 4_000_000) {
+                frameTimes += MetalHUDLog.frameTimes(in: text, since: record.startedAt)
+            }
+        }
+        record.fps = FrameStats(frameTimesMs: frameTimes)
         var extra: [String] = []
         let everything = excerpts.map(\.text).joined(separator: "\n")
         if everything.contains("graphics device is Vulkan") {

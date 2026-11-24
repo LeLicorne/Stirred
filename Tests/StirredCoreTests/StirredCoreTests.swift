@@ -1762,3 +1762,36 @@ struct PresetTests {
         #expect(text.contains("1 of 3 stayed alive") && text.contains("not that its picture is right"))
     }
 }
+
+@Suite struct FrameStatsTests {
+    @Test func readsFrameTimesFromMetalHUDLines() {
+        let log = """
+        2026-11-16 10:53:05.697 wine[64340:15881896] metal-HUD: 542,12.44,113.24,16.67,0.10,16.67,0.10,25.00,0.10,
+        2026-11-16 10:53:06.722 wine[64340:15881911] metal-HUD: 597,12.44,113.24,25.00,0.08,16.67,0.12
+        2026-11-16 10:53:06.800 wine[64340:1] [libMTLHud] Metric com.apple.hud-stat.fps already exist
+        info:  Using feature level D3D_FEATURE_LEVEL_11_0
+        """
+        #expect(MetalHUDLog.frameTimes(in: log) == [16.67, 16.67, 25.0, 25.0, 16.67])
+        let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX"); formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let since = formatter.date(from: "2026-11-16 10:53:06")!
+        #expect(MetalHUDLog.frameTimes(in: log, since: since) == [25.0, 16.67])     // an earlier session's lines are ignored
+        #expect(MetalHUDLog.frameTimes(in: "nothing here").isEmpty)
+    }
+
+    @Test func averageAndOnePercentLow() throws {
+        var times = [Double](repeating: 10, count: 198)      // 100 FPS...
+        times += [50, 50]                                     // ...with two 50 ms hitches
+        let stats = try #require(FrameStats(frameTimesMs: times))
+        #expect(stats.frames == 200)
+        #expect(stats.averageFPS == 96.2)                     // 200 frames in 2.08 s
+        #expect(stats.onePercentLowFPS == 20)                 // the slowest 1 % are the 50 ms frames
+        #expect(stats.medianFrameMs == 10)
+        #expect(FrameStats(frameTimesMs: [16.6, 16.6]) == nil)   // too few frames to say anything
+    }
+
+    @Test func hudPlanAsksForTheFrameLog() {
+        let plan = LaunchPlanner.plan(recipe: nil, detectedAPIs: [.d3d11], hud: true)
+        #expect(plan.environment["MTL_HUD_ENABLED"] == "1" && plan.environment["MTL_HUD_LOG_ENABLED"] == "1")
+        #expect(LaunchPlanner.plan(recipe: nil, detectedAPIs: [.d3d11]).environment["MTL_HUD_LOG_ENABLED"] == nil)
+    }
+}

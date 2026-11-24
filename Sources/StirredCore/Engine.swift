@@ -56,6 +56,10 @@ public enum EngineLocator {
     /// Name of the engine the running Steam was started with (Steam and the games it launches share one Wine).
     public static let steamEngineFile = "steam-engine.txt"
 
+    /// "1" while the running Steam was started with the Metal HUD on (games inherit Steam's environment, so the FPS overlay
+    /// and the frame-time log are decided when Steam starts).
+    public static let steamHUDFile = "steam-hud.txt"
+
     /// Same idea for any Windows environment: each prefix has its own wineserver, so each remembers its own engine.
     /// Steam keeps its historical file name.
     public static func sessionFile(forPrefix name: String) -> String { name == "steam" ? steamEngineFile : "session-\(name).txt" }
